@@ -162,6 +162,7 @@ export default function GeminiDashboard() {
   const [apiError, setApiError] = useState(null);
   const [isPinned, setIsPinned] = useState(false);
   const [selectedAgent, setSelectedAgent] = useState(null);
+  const [showAgentFlowLocal, setShowAgentFlowLocal] = useState(false);
 
   // Map chats to have 'id' property for ChatSidebar compatibility
   // Filter out any chats without sessionId to prevent errors
@@ -202,6 +203,7 @@ export default function GeminiDashboard() {
     setApiError(null);
     setIsPinned(false);
     setSelectedAgent(null);
+    setShowAgentFlowLocal(workflowState.showAgentFlow ?? false);
   }, [activeChatId]);
 
   const handleNewChat = () => {
@@ -252,7 +254,7 @@ export default function GeminiDashboard() {
   };
 
   const handleToggleAgentFlow = () => {
-    // Toggle agent flow visibility (local state since we're not persisting this)
+    setShowAgentFlowLocal((prev) => !prev);
   };
 
   // Get the current display state
@@ -261,7 +263,7 @@ export default function GeminiDashboard() {
   const queryRejected = workflowState.queryRejected;
   const reportReady = workflowState.reportReady;
   const panelCollapsed = workflowState.panelCollapsed;
-  const showAgentFlow = workflowState.showAgentFlow;
+  const showAgentFlow = showAgentFlowLocal;
 
   const activeAgentIndex = activeAgent !== null ? AGENT_ID_MAP[activeAgent] : null;
   const selectedAgentIndex =
