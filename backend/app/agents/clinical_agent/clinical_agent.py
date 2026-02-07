@@ -107,10 +107,22 @@ Return ONLY a JSON object, nothing else:"""
         print(f"[ERROR] Failed to parse JSON from LLM: {e}")
         return None, None, None, None
 
-    drug = data.get("drug")
-    condition = data.get("condition")
-    phase = data.get("phase")
-    status = data.get("status")
+    # Helper to normalize null/empty strings
+    def clean_val(val):
+        if val is None or (
+            isinstance(val, str) and val.lower() in ("null", "none", "")
+        ):
+            return None
+        return val
+
+    drug = clean_val(data.get("drug"))
+    condition = clean_val(data.get("condition"))
+    phase = clean_val(data.get("phase"))
+    status = clean_val(data.get("status"))
+
+    print(
+        f"[CLINICAL] LLM raw extracted: drug={drug}, condition={condition}, phase={phase}, status={status}"
+    )
 
     return drug, condition, phase, status
 
@@ -124,8 +136,14 @@ def run_clinical_agent(
     status: str | None = None,
 ) -> dict:
     """Run the clinical agent. Uses LLM-based prompt extraction only - no regex fallback."""
+    print(f"[CLINICAL] Starting agent with prompt: {user_prompt}")
+
     # Use LLM extraction (primary method only)
     llm_drug, llm_condition, llm_phase, llm_status = _llm_extract_prompt(user_prompt)
+
+    print(
+        f"[CLINICAL] LLM extracted: drug={llm_drug}, condition={llm_condition}, phase={llm_phase}, status={llm_status}"
+    )
 
     # Prefer explicit parameters, then LLM extraction
     drug = drug_name or llm_drug
@@ -133,50 +151,29 @@ def run_clinical_agent(
     ph = phase or llm_phase
     stat = status or llm_status
 
-    if not drug:
+    # Clinical trials can be searched by drug OR condition - we need at least one
+    search_term = drug or cond
+
+    if not search_term:
         return {
             "status": "error",
-            "message": "Could not extract drug name from query. Please provide more details about the drug you're asking about.",
+            "message": "Could not extract drug name or condition from query. Please provide a drug name or disease/condition.",
         }
-
-    # If Agent.run exists, use it; otherwise fall back to direct tool calls
-    if hasattr(clinical_agent, "run"):
-        try:
-            result = clinical_agent.run(user_prompt)
-            # If crew returns string, try JSON parse then enrich
-            if isinstance(result, str):
-                try:
-                    parsed = json.loads(result)
-                    return {
-                        "status": "success",
-                        "data": parsed,
-                        "visualizations": build_clinical_visualizations(
-                            parsed if isinstance(parsed, dict) else {}
-                        ),
-                    }
-                except json.JSONDecodeError:
-                    return {"status": "success", "data": result}
-            # If crew returns dict-like, enrich with viz
-            if isinstance(result, dict):
-                return {
-                    "status": "success",
-                    "data": result,
-                    "visualizations": build_clinical_visualizations(result),
-                }
-            return {"status": "success", "data": result}
-        except AttributeError:
-            # fall through to direct tools
-            pass
-        except Exception as e:
-            return {"status": "error", "message": str(e)}
 
     try:
         fetch_fn = getattr(fetch_clinical_trials, "func", fetch_clinical_trials)
         analyze_fn = getattr(analyze_trial_phases, "func", analyze_trial_phases)
 
+        print(
+            f"[CLINICAL] Fetching trials for drug={drug}, condition={cond}, phase={ph}"
+        )
         trials = fetch_fn(drug_name=drug, condition=cond, phase=ph, indication=None)
+
         if "error" in trials:
+            print(f"[CLINICAL] Error from fetch_clinical_trials: {trials.get('error')}")
             return {"status": "error", "message": trials.get("error")}
+
+        print(f"[CLINICAL] Found {trials.get('total_trials', 0)} trials")
         analysis = analyze_fn(trials)
 
         payload = {
@@ -195,5 +192,9 @@ def run_clinical_agent(
             "data": payload,
             "visualizations": build_clinical_visualizations(payload),
         }
-    except Exception as e:  # pragma: no cover - defensive
+    except Exception as e:
+        print(f"[CLINICAL] Error: {str(e)}")
+        import traceback
+
+        traceback.print_exc()
         return {"status": "error", "message": str(e)}

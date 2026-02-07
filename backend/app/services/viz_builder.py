@@ -12,7 +12,7 @@ This module is designed to be:
 
 from __future__ import annotations
 
-from typing import Any, Dict, Iterable, List, Optional, Sequence, Union
+from typing import Dict, Iterable, List, Optional, Sequence
 
 from app.models.visualization import (
     TableColumn,
@@ -270,6 +270,127 @@ def build_clinical_visualizations(payload: dict) -> List[dict]:
                 else maturity_score,
                 unit="%",
             )
+        )
+
+    return viz
+
+
+def build_iqvia_visualizations(payload: dict) -> List[dict]:
+    """Create a standard set of visualizations from the IQVIA agent payload."""
+    viz: List[dict] = []
+
+    market_data = payload.get("market_data", {}) if payload else {}
+    cagr_analysis = payload.get("cagr_analysis", {}) if payload else {}
+    infographics = payload.get("infographics", []) if payload else []
+
+    # Extract data structure from the nested market_data response
+    data_section = market_data.get("data", {}) if market_data else {}
+
+    market_forecast = data_section.get("market_forecast") or {}
+    competitive_share = data_section.get("competitive_share") or {}
+
+    forecast_data = market_forecast.get("data", [])
+    competitive_data = competitive_share.get("data", [])
+
+    # Market Forecast Chart
+    if forecast_data:
+        viz.append(
+            build_bar_chart(
+                id="market_forecast",
+                title=market_forecast.get("title", "Market Forecast"),
+                items=forecast_data,
+                x_field="year",
+                y_field="value",
+                description=f"Market size forecast for {payload.get('input', {}).get('drug_name', 'drug')}",
+            )
+        )
+
+    # Competitive Share Chart
+    if competitive_data:
+        viz.append(
+            build_pie_chart(
+                id="competitive_share",
+                title=competitive_share.get("title", "Competitive Market Share"),
+                items=[
+                    {"label": item.get("company"), "value": item.get("share")}
+                    for item in competitive_data
+                    if item
+                ],
+                label_field="label",
+                value_field="value",
+            )
+        )
+
+    # Market forecast table
+    if forecast_data:
+        columns = [
+            {"key": "year", "label": "Year"},
+            {"key": "value", "label": "Market Size (USD)"},
+        ]
+        viz.append(
+            build_table(
+                id="market_forecast_table",
+                title="Market Forecast Details",
+                columns=columns,
+                rows=forecast_data,
+                page_size=10,
+            )
+        )
+
+    # Competitive share table
+    if competitive_data:
+        columns = [
+            {"key": "company", "label": "Company"},
+            {"key": "share", "label": "Market Share"},
+        ]
+        viz.append(
+            build_table(
+                id="competitive_share_table",
+                title="Competitive Market Share Details",
+                columns=columns,
+                rows=competitive_data,
+                page_size=10,
+            )
+        )
+
+    # CAGR Metric Card
+    if cagr_analysis and "cagr_percent" in cagr_analysis:
+        viz.append(
+            build_metric_card(
+                id="cagr_growth",
+                title="Compound Annual Growth Rate (CAGR)",
+                value=cagr_analysis.get("cagr_percent"),
+                unit="%",
+            )
+        )
+
+    # Total Growth Metric Card
+    if cagr_analysis and "total_growth_percent" in cagr_analysis:
+        viz.append(
+            build_metric_card(
+                id="total_growth",
+                title="Total Growth",
+                value=cagr_analysis.get("total_growth_percent"),
+                unit="%",
+            )
+        )
+
+    # Add Statista infographics as image visualizations
+    for idx, infographic in enumerate(infographics):
+        viz.append(
+            {
+                "id": f"infographic_{idx}",
+                "vizType": "image",
+                "title": infographic.get("title", "Market Infographic"),
+                "description": infographic.get("subtitle", ""),
+                "data": {
+                    "imageUrl": infographic.get("content"),
+                    "caption": infographic.get("description", ""),
+                    "sourceUrl": infographic.get("url", ""),
+                    "source": "Statista",
+                    "premium": infographic.get("premium", False),
+                },
+            }
         )
 
     return viz

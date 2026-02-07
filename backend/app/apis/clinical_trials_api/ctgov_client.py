@@ -94,7 +94,7 @@ class ClinicalTrialsGovClient:
 
     def search_trials(
         self,
-        drug_name: str,
+        drug_name: Optional[str] = None,
         condition: Optional[str] = None,
         phase: Optional[str] = None,
         status: Optional[str] = None,
@@ -104,10 +104,14 @@ class ClinicalTrialsGovClient:
         include_results: bool = False,
     ) -> Dict[str, Any]:
         """Search for studies and return normalized payload with aggregates."""
-        if not drug_name:
-            raise ValueError("drug_name is required for querying trials")
+        if not drug_name and not condition:
+            raise ValueError(
+                "At least one of drug_name or condition is required for querying trials"
+            )
 
-        term_parts = [f'intervention:"{drug_name}"']
+        term_parts = []
+        if drug_name:
+            term_parts.append(f'intervention:"{drug_name}"')
         if condition:
             term_parts.append(f'condition:"{condition}"')
         if phase:

@@ -4,14 +4,17 @@ from app.apis.clinical_trials_api import ClinicalTrialsGovClient
 
 @tool("fetch_clinical_trials")
 def fetch_clinical_trials(
-    drug_name: str, condition: str = None, indication: str = None, phase: str = None
+    drug_name: str = None,
+    condition: str = None,
+    indication: str = None,
+    phase: str = None,
 ) -> dict:
     """
     Fetches clinical trial data from ClinicalTrials.gov v2 API for a specific drug or condition.
 
     Args:
-        drug_name: Name of the drug or intervention (required)
-        condition: Medical condition being studied (optional)
+        drug_name: Name of the drug or intervention (optional if condition provided)
+        condition: Medical condition being studied (optional if drug_name provided)
         indication: Specific indication focus (optional, e.g., "AUD", "general") - currently unused
         phase: Trial phase filter (optional: "Phase 1", "Phase 2", "Phase 3", "Phase 4")
 
@@ -22,10 +25,23 @@ def fetch_clinical_trials(
         client = ClinicalTrialsGovClient()
 
         # Normalize "null" string inputs to None
+        if isinstance(drug_name, str) and drug_name.lower() == "null":
+            drug_name = None
         if isinstance(condition, str) and condition.lower() == "null":
             condition = None
         if isinstance(phase, str) and phase.lower() == "null":
             phase = None
+
+        # Validate at least one search term
+        if not drug_name and not condition:
+            return {
+                "error": "At least one of drug_name or condition is required",
+                "drug_name": drug_name,
+                "condition": condition,
+                "data_source": "ClinicalTrials.gov v2 API",
+                "trials": [],
+                "phase_distribution": {},
+            }
 
         # Search trials with provided filters
         result = client.search_trials(
@@ -36,12 +52,15 @@ def fetch_clinical_trials(
             max_records=300,
         )
 
+        # Descriptive name for messages
+        search_term = drug_name or condition or "unknown"
+
         if not result["trials"]:
             return {
                 "drug_name": drug_name,
                 "condition": condition,
                 "phase_filter": phase,
-                "error": f"No clinical trials found for {drug_name}",
+                "error": f"No clinical trials found for {search_term}",
                 "data_source": "ClinicalTrials.gov v2 API",
                 "trials": [],
                 "phase_distribution": {},

@@ -14,6 +14,7 @@ class VisualizationType(str, Enum):
     HEATMAP = "heatmap"
     TABLE = "table"
     CARD = "card"
+    IMAGE = "image"
 
 
 class TableColumn(BaseModel):

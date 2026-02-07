@@ -857,6 +857,62 @@ const EmptyState = ({ message = "No data available" }) => (
 );
 
 // ============================================================================
+// IMAGE VISUALIZATION - Renders images with captions
+// ============================================================================
+
+const ImageViz = ({ viz }) => {
+  const { data, title, description } = viz;
+  const imageUrl = data?.imageUrl || data?.content;
+  const caption = data?.caption || description;
+  const sourceUrl = data?.sourceUrl;
+  const source = data?.source || "Statista";
+
+  if (!imageUrl) {
+    return (
+      <VizCard title={title || "Image"}>
+        <EmptyState message="No image URL provided" />
+      </VizCard>
+    );
+  }
+
+  return (
+    <VizCard title={title || "Market Infographic"} description={description}>
+      <div className="space-y-4">
+        <div className="relative bg-muted rounded-lg overflow-hidden">
+          <img
+            src={imageUrl}
+            alt={title || "Infographic"}
+            className="w-full h-auto"
+            onError={(e) => {
+              e.target.style.display = "none";
+              e.target.nextSibling.style.display = "flex";
+            }}
+          />
+          <div
+            className="hidden flex-col items-center justify-center py-12 text-center"
+            style={{ display: "none" }}
+          >
+            <AlertCircle size={32} className="text-muted-foreground mb-3" />
+            <p className="text-sm text-muted-foreground">Failed to load image</p>
+          </div>
+        </div>
+        {caption && <p className="text-sm text-muted-foreground italic">{caption}</p>}
+        {sourceUrl && (
+          <a
+            href={sourceUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-xs text-primary hover:underline inline-flex items-center gap-1"
+          >
+            View on {source} →
+          </a>
+        )}
+      </div>
+    </VizCard>
+  );
+};
+
+// ============================================================================
 // VISUALIZATION RENDERER - Routes to correct component
 // ============================================================================
 
@@ -880,6 +936,8 @@ export const VizRenderer = ({ viz }) => {
       return <DataTableViz viz={viz} />;
     case "card":
       return <MetricCardViz viz={viz} index={viz.index || 0} />;
+    case "image":
+      return <ImageViz viz={viz} />;
     default:
       return (
         <VizCard title={viz.title || "Unsupported Chart"}>
@@ -898,19 +956,21 @@ export const VizList = ({ visualizations = [], agentName, className = "" }) => {
 
   // Group visualizations by type for logical ordering
   const metricCards = visualizations.filter((v) => v.vizType?.toLowerCase() === "card");
+  const images = visualizations.filter((v) => v.vizType?.toLowerCase() === "image");
   const barCharts = visualizations.filter((v) => v.vizType?.toLowerCase() === "bar");
   const pieCharts = visualizations.filter((v) => v.vizType?.toLowerCase() === "pie");
   const lineCharts = visualizations.filter((v) => v.vizType?.toLowerCase() === "line");
   const areaCharts = visualizations.filter((v) => v.vizType?.toLowerCase() === "area");
   const tables = visualizations.filter((v) => v.vizType?.toLowerCase() === "table");
 
-  // Logical order: Cards → Charts (Bar, Pie, Line, Area) → Tables
+  // Logical order: Cards → Charts (Bar, Pie, Line, Area) → Images → Tables
   const orderedSections = [
     { type: "cards", items: metricCards, cols: "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3" },
     { type: "bar", items: barCharts, cols: "grid-cols-1" },
     { type: "pie", items: pieCharts, cols: "grid-cols-1" },
     { type: "line", items: lineCharts, cols: "grid-cols-1" },
     { type: "area", items: areaCharts, cols: "grid-cols-1" },
+    { type: "images", items: images, cols: "grid-cols-1 lg:grid-cols-2" },
     { type: "tables", items: tables, cols: "grid-cols-1" },
   ];
 
