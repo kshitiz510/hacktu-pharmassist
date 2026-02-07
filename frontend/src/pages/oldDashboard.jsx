@@ -162,6 +162,9 @@ export default function GeminiDashboard() {
   const [apiError, setApiError] = useState(null);
   const [isPinned, setIsPinned] = useState(false);
   const [selectedAgent, setSelectedAgent] = useState(null);
+  const [showTitleDialog, setShowTitleDialog] = useState(false);
+  const [titleInput, setTitleInput] = useState("");
+  const [isInitializing, setIsInitializing] = useState(false);
 
   // Map chats to have 'id' property for ChatSidebar compatibility
   // Filter out any chats without sessionId to prevent errors
@@ -205,9 +208,8 @@ export default function GeminiDashboard() {
   }, [activeChatId]);
 
   const handleNewChat = () => {
+    setShowTitleDialog(true);
     setApiError(null);
-    // Just deselect current chat to show landing page
-    selectChat(null);
   };
 
   const handleSelectChat = (chatId) => {
@@ -216,6 +218,30 @@ export default function GeminiDashboard() {
 
   const handleDeleteChat = (chatId) => {
     deleteChat(chatId);
+  };
+
+  const handleInitializeChat = async () => {
+    if (!titleInput.trim()) return;
+    setIsInitializing(true);
+    setApiError(null);
+    try {
+      await createChatFromPrompt(titleInput.trim());
+      setShowTitleDialog(false);
+      setTitleInput("");
+    } catch {
+      setApiError("Failed to create chat");
+    } finally {
+      setIsInitializing(false);
+    }
+  };
+
+  const handleTitleKeyPress = (e) => {
+    if (e.key === "Enter" && !isInitializing) {
+      handleInitializeChat();
+    } else if (e.key === "Escape") {
+      setShowTitleDialog(false);
+      setTitleInput("");
+    }
   };
 
   const handleSendPrompt = async () => {
@@ -620,7 +646,7 @@ export default function GeminiDashboard() {
                       )}
                   </AnimatePresence>
                 </motion.div>
-              ) : !sessionId ? (
+              ) : !sessionId && !showTitleDialog ? (
                 /* Initialization Screen */
                 <motion.div
                   initial={{ opacity: 0 }}
@@ -663,7 +689,10 @@ export default function GeminiDashboard() {
                       transition={{ delay: 0.4 }}
                       whileHover={{ scale: 1.05 }}
                       whileTap={{ scale: 0.95 }}
-                      onClick={handleNewChat}
+                      onClick={() => {
+                        setShowTitleDialog(true);
+                        setApiError(null);
+                      }}
                       className="inline-flex items-center justify-center gap-3 px-8 py-4 rounded-xl font-semibold text-lg text-primary-foreground bg-gradient-to-r from-primary to-blue-600 hover:from-primary/90 hover:to-blue-600/90 shadow-lg shadow-primary/30 transition-all mb-12"
                     >
                       <Plus size={20} />
@@ -726,6 +755,84 @@ export default function GeminiDashboard() {
                       })}
                     </motion.div>
                   </div>
+                </motion.div>
+              ) : showTitleDialog ? (
+                /* Title Input Dialog */
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="flex-1 flex items-center justify-center"
+                >
+                  <motion.div
+                    initial={{ scale: 0.95, opacity: 0, y: 20 }}
+                    animate={{ scale: 1, opacity: 1, y: 0 }}
+                    transition={{ type: "spring", stiffness: 100 }}
+                    className="w-full max-w-md px-6"
+                  >
+                    <Card className="bg-card border-border shadow-xl">
+                      <CardContent className="p-8">
+                        <h2 className="text-2xl font-bold text-foreground mb-2">
+                          Name Your Analysis
+                        </h2>
+                        <p className="text-sm text-muted-foreground mb-6">
+                          Give your drug repurposing analysis a descriptive title
+                        </p>
+
+                        <div className="space-y-4">
+                          <Input
+                            placeholder="e.g., Semaglutide for Obesity Treatment"
+                            value={titleInput}
+                            onChange={(e) => setTitleInput(e.target.value)}
+                            onKeyPress={handleTitleKeyPress}
+                            disabled={isInitializing}
+                            autoFocus
+                            className="h-11 text-base"
+                          />
+
+                          {apiError && (
+                            <motion.div
+                              initial={{ opacity: 0, y: -10 }}
+                              animate={{ opacity: 1, y: 0 }}
+                              className="p-3 rounded-lg bg-destructive/10 border border-destructive/30 flex items-center gap-2"
+                            >
+                              <AlertCircle className="text-destructive flex-shrink-0" size={16} />
+                              <p className="text-xs text-destructive">{apiError}</p>
+                            </motion.div>
+                          )}
+
+                          <div className="flex gap-3 pt-2">
+                            <Button
+                              variant="outline"
+                              onClick={() => {
+                                setShowTitleDialog(false);
+                                setTitleInput("");
+                                setApiError(null);
+                              }}
+                              disabled={isInitializing}
+                              className="flex-1"
+                            >
+                              Cancel
+                            </Button>
+                            <Button
+                              onClick={handleInitializeChat}
+                              disabled={isInitializing || !titleInput.trim()}
+                              className="flex-1"
+                            >
+                              {isInitializing ? (
+                                <>
+                                  <Loader2 className="animate-spin mr-2" size={16} />
+                                  Creating...
+                                </>
+                              ) : (
+                                "Create Chat"
+                              )}
+                            </Button>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </motion.div>
                 </motion.div>
               ) : (
                 /* Chat Interface View */

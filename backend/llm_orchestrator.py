@@ -325,11 +325,23 @@ def _keyword_based_validation(user_query: str) -> Dict[str, Any]:
         }
 
 
-def validate_and_plan_query(user_query: str) -> Dict[str, Any]:
+def validate_and_plan_session(session: Dict[str, Any]) -> Dict[str, Any]:
     """
-    Validate if the query is related to pharmaceutical drug repurposing
-    and plan which agents should handle it.
+    Orchestrate based on full session state.
     """
+    print("\n[ORCHESTRATOR] Received full session")
+    print(f"Session ID: {session['sessionId']}")
+    print(f"Message count: {len(session['chatHistory'])}")
+
+    print("\nConversation so far:")
+    for msg in session["chatHistory"]:
+        print(f"{msg['role'].upper()}: {msg['content']}")
+
+    # Use latest user message as query
+    user_query = next(msg["content"] for msg in reversed(session["chatHistory"]) if msg["role"] == "user")
+
+    print(f"\n[ORCHESTRATOR] Latest user intent: {user_query}")
+
     print(f"[Orchestrator] Validating query: {user_query[:50]}...")
     query_lower = user_query.lower().strip()
     
