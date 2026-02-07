@@ -1,10 +1,13 @@
-import { StrictMode } from 'react'
-import { createRoot } from 'react-dom/client'
-import './index.css'
-import App from './App.jsx'
+import { StrictMode } from "react";
+import { createRoot } from "react-dom/client";
+import { ThemeProvider } from "@/components/ui/theme-provider";
+import "./index.css";
+import App from "./App.jsx";
 
-createRoot(document.getElementById('root')).render(
+createRoot(document.getElementById("root")).render(
   <StrictMode>
-    <App />
+    <ThemeProvider defaultTheme="dark" storageKey="pharma-ai-theme">
+      <App />
+    </ThemeProvider>
   </StrictMode>,
-)
+);

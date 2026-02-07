@@ -54,6 +54,7 @@ AGENT_NAMES = {
 
 # Data files mapping
 DATA_DIR = os.path.join(os.path.dirname(__file__), "dummyData")
+MOCK_DATA_DIR = os.path.join(os.path.dirname(__file__), "mockData")
 DATA_FILES = {
     "iqvia": "iqvia_data.json",
     "exim": "exim_data.json",
@@ -61,6 +62,16 @@ DATA_FILES = {
     "clinical": "clinical_data.json",
     "internal_knowledge": "internal_knowledge_data.json",
     "report_generator": "report_data.json"
+}
+
+# Agent ID to agent name mapping for mockData
+AGENT_KEY_MAPPING = {
+    "iqvia": "IQVIA Insights Agent",
+    "exim": "EXIM Trade Agent",
+    "patent": "Patent Landscape Agent",
+    "clinical": "Clinical Trials Agent",
+    "internal_knowledge": "Internal Knowledge Agent",
+    "report_generator": "Report Generator Agent"
 }
 
 
@@ -99,33 +110,73 @@ def detect_indication(prompt: str) -> str:
 
 
 def load_agent_data(agent_id: str, indication: str, drug_name: str = "semaglutide") -> Dict[str, Any]:
-    """Load data from JSON file for a specific agent"""
+    """
+    Load data from JSON file for a specific agent.
+    Tries mockData first (for multiple drugs), then falls back to dummyData (for semaglutide).
+    """
     if agent_id not in DATA_FILES:
         return {"error": f"Unknown agent: {agent_id}"}
     
+    drug_key = drug_name.lower().replace(" ", "_").replace("-", "_")
+    indication_key = indication.lower().replace(" ", "_") if indication else "general"
+    
+    # First try mockData with temp.json structure
+    mock_data_file = os.path.join(MOCK_DATA_DIR, "temp.json")
+    if os.path.exists(mock_data_file):
+        try:
+            with open(mock_data_file, "r", encoding="utf-8") as f:
+                mock_data = json.load(f)
+            
+            # Create composite key: drug_indication (e.g., "metformin_cancer")
+            composite_key = f"{drug_key}_{indication_key}"
+            
+            # Try to find data for this drug-indication combo
+            if composite_key in mock_data:
+                agent_name = AGENT_KEY_MAPPING.get(agent_id, agent_id)
+                if agent_name in mock_data[composite_key]:
+                    print(f"[API] Found {agent_id} data in mockData for {composite_key}")
+                    return mock_data[composite_key][agent_name]
+            
+            # If not found, try just the drug key
+            for key in mock_data.keys():
+                if key.startswith(drug_key):
+                    agent_name = AGENT_KEY_MAPPING.get(agent_id, agent_id)
+                    if agent_name in mock_data[key]:
+                        print(f"[API] Found {agent_id} data in mockData for {key}")
+                        return mock_data[key][agent_name]
+        except Exception as e:
+            print(f"[API] Error loading mockData: {e}")
+    
+    # Fallback to dummyData (original structure for semaglutide)
     data_file = os.path.join(DATA_DIR, DATA_FILES[agent_id])
     
     try:
         with open(data_file, "r", encoding="utf-8") as f:
             data = json.load(f)
         
-        drug_key = drug_name.lower().replace(" ", "_")
-        
         # For exim agent, there's no indication split
         if agent_id == "exim":
-            return data.get(drug_key, {})
+            result = data.get(drug_key, {})
+            if result:
+                print(f"[API] Found {agent_id} data in dummyData for {drug_key}")
+                return result
         
         # For other agents, check indication
-        if indication == "aud":
+        if indication_key == "aud":
             key = f"{drug_key}_aud"
         else:
             key = f"{drug_key}_general"
         
-        return data.get(key, data.get(f"{drug_key}_general", {}))
+        result = data.get(key, data.get(f"{drug_key}_general", {}))
+        if result:
+            print(f"[API] Found {agent_id} data in dummyData for {key}")
+        return result
     
     except FileNotFoundError:
+        print(f"[API] Data file not found for {agent_id}")
         return {"error": f"Data file not found for {agent_id}"}
     except json.JSONDecodeError:
+        print(f"[API] Invalid JSON in {agent_id} data file")
         return {"error": f"Invalid JSON in {agent_id} data file"}
 
 
@@ -203,20 +254,29 @@ async def run_analysis(request: AnalysisRequest):
     import uuid
     
     request_id = str(uuid.uuid4())[:8]
-    indication = request.indication or detect_indication(request.prompt)
     
-    # Determine which agents to run based on prompt_index
-    # First prompt: all agents
-    # Follow-up prompts: skip EXIM (as per frontend logic)
-    if request.prompt_index == 1:
-        agent_sequence = ["iqvia", "exim", "patent", "clinical", "internal_knowledge", "report_generator"]
+    # Use LLM orchestrator to determine agents if available
+    if HAS_LLM_ORCHESTRATOR and validate_and_plan_query:
+        validation_result = validate_and_plan_query(request.prompt)
+        
+        # Use orchestrator's agent selection
+        agent_sequence = validation_result.get("agents_to_run", [])
+        indication = request.indication or validation_result.get("indication", "general")
+        drug_name = request.drug_name or validation_result.get("drug_name", "semaglutide")
+        
+        # If orchestrator didn't return agents, use defaults
+        if not agent_sequence:
+            agent_sequence = ["iqvia", "exim", "patent", "clinical", "internal_knowledge", "report_generator"]
     else:
-        agent_sequence = ["iqvia", "patent", "clinical", "internal_knowledge", "report_generator"]
+        # Fallback: use all agents
+        agent_sequence = ["iqvia", "exim", "patent", "clinical", "internal_knowledge", "report_generator"]
+        indication = request.indication or detect_indication(request.prompt)
+        drug_name = request.drug_name
     
     results = []
     
     for agent_id in agent_sequence:
-        data = load_agent_data(agent_id, indication, request.drug_name)
+        data = load_agent_data(agent_id, indication, drug_name)
         
         results.append(AgentResponse(
             agent_id=agent_id,
@@ -238,16 +298,51 @@ async def run_analysis(request: AnalysisRequest):
 async def run_analysis_stream(request: AnalysisRequest):
     """
     Run analysis with LLM-powered query validation and orchestration.
-    Only processes pharmaceutical drug repurposing related queries.
+    Handles:
+    - Greetings (LLM replies, no agents)
+    - Vague medical topics (definition + clarification)
+    - Actionable pharma queries (full agent pipeline)
     """
     import uuid
     
     request_id = str(uuid.uuid4())[:8]
     
+    # Check if LLM orchestrator is available
+    if not HAS_LLM_ORCHESTRATOR or validate_and_plan_query is None:
+        print(f"[API] LLM orchestrator not available, using default agent sequence")
+        # Fallback: run all agents
+        agent_sequence = ["iqvia", "exim", "patent", "clinical", "internal_knowledge", "report_generator"]
+        drug_name = request.drug_name or "semaglutide"
+        indication = request.indication or detect_indication(request.prompt)
+        
+        # Execute agents and return
+        agents_data = {}
+        for agent_id in agent_sequence:
+            if agent_id in DATA_FILES:
+                data = load_agent_data(agent_id, indication, drug_name)
+                agents_data[agent_id] = {
+                    "agent_id": agent_id,
+                    "agent_name": AGENT_NAMES.get(agent_id, agent_id),
+                    "status": "completed",
+                    "data": data
+                }
+        
+        return {
+            "request_id": request_id,
+            "prompt": request.prompt,
+            "is_valid": True,
+            "rejection_reason": None,
+            "indication": indication,
+            "drug_name": drug_name,
+            "agent_sequence": agent_sequence,
+            "agents": agents_data,
+            "summary": None
+        }
+    
     # Step 1: Validate query with LLM orchestrator
     print(f"[API] Validating query: {request.prompt[:100]}...")
     validation_result = validate_and_plan_query(request.prompt)
-    
+
     # Step 2: Check if this is a greeting - respond friendly
     if validation_result.get("is_greeting", False):
         print(f"[API] Greeting detected, sending friendly response")
@@ -263,7 +358,29 @@ async def run_analysis_stream(request: AnalysisRequest):
             "summary": None
         }
     
-    # Step 3: Check if query is valid (not a greeting, not pharma-related)
+    # Step 3: Vague medical topic handling (definition + clarification)
+    if validation_result.get("is_vague", False):
+        print(f"[API] Vague topic detected, asking for clarification")
+        
+        combined_message = (
+            f"{validation_result.get('definition')}\n\n"
+            f"{validation_result.get('followup_question')}"
+        )
+        
+        return {
+            "request_id": request_id,
+            "prompt": request.prompt,
+            "is_valid": True,
+            "is_vague": True,
+            "assistant_message": combined_message,
+            "indication": "general",
+            "agent_sequence": [],
+            "agents": {},
+            "summary": None
+        }
+
+
+    # Step 4: Invalid non-pharma queries
     if not validation_result.get("is_valid", False):
         print(f"[API] Query rejected: {validation_result.get('rejection_reason')}")
         return {
@@ -278,27 +395,25 @@ async def run_analysis_stream(request: AnalysisRequest):
             "summary": None
         }
     
+    # Step 5: Valid actionable pharma query → run agents
     print(f"[API] Query validated. Agents to run: {validation_result.get('agents_to_run')}")
     
-    # Step 3: Determine indication and drug name from orchestrator
     indication = request.indication or validation_result.get("indication", "general") or detect_indication(request.prompt)
     drug_name = request.drug_name or validation_result.get("drug_name") or "semaglutide"
     
-    # Step 4: Get agent sequence from orchestrator (or use defaults based on prompt_index)
     orchestrator_agents = validation_result.get("agents_to_run", [])
     
-    # Ensure we have agents to run
+    # Fallback default agents
     if not orchestrator_agents:
         if request.prompt_index == 1:
             orchestrator_agents = ["iqvia", "exim", "patent", "clinical", "internal_knowledge", "report_generator"]
         else:
             orchestrator_agents = ["iqvia", "patent", "clinical", "internal_knowledge", "report_generator"]
     
-    # Always ensure report_generator is included for comprehensive queries
+    # Ensure report generator is included for multi-agent analysis
     if "report_generator" not in orchestrator_agents and len(orchestrator_agents) >= 3:
         orchestrator_agents.append("report_generator")
     
-    # Step 5: Execute agents and collect data
     agents_data = {}
     results_for_synthesis = []
     

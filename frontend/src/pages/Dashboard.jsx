@@ -109,33 +109,32 @@ export default function GeminiDashboard() {
 
     console.log("[Dashboard] Starting agent workflow:", { inputPrompt, chatId, promptIndex });
 
-    // Reset workflow state for new analysis
-    updateWorkflowState({
-      activeAgent: null,
-      showAgentDataByAgent: {},
-      reportReady: false,
-      workflowComplete: false,
-      queryRejected: false,
-      systemResponse: null,
-      panelCollapsed: false,
-      showAgentFlow: true, // Show agent flow UI during analysis
-    });
+    // Reset workflow state for new analysis (pass chatId for newly created chats)
+    updateWorkflowState(
+      {
+        activeAgent: null,
+        showAgentDataByAgent: {},
+        reportReady: false,
+        workflowComplete: false,
+        queryRejected: false,
+        systemResponse: null,
+        panelCollapsed: false,
+        showAgentFlow: true, // Show agent flow UI during analysis
+      },
+      chatId,
+    );
 
     setIsPinned(false);
     setSelectedAgent(null);
     setIsLoading(true);
     setApiError(null);
 
-    const isFirstPrompt = promptIndex === 1;
-    const agentSequence = isFirstPrompt ? [0, 1, 2, 3, 4, 5] : [0, 2, 3, 4, 5];
-    console.log("[Dashboard] Agent sequence:", agentSequence, "isFirstPrompt:", isFirstPrompt);
-
     try {
       console.log("[Dashboard] Calling API runAnalysisStream...");
       const response = await api.runAnalysisStream(
         inputPrompt,
-        "semaglutide",
-        "general",
+        null, // Let LLM orchestrator extract drug name
+        null, // Let LLM orchestrator extract indication
         promptIndex,
       );
       console.log("[Dashboard] API response received:", response);
@@ -143,16 +142,19 @@ export default function GeminiDashboard() {
       // Check if this is a greeting response
       if (response.is_greeting === true) {
         console.log("[Dashboard] Greeting detected");
-        updateWorkflowState({
-          queryRejected: true,
-          showAgentFlow: false, // Don't show agent flow for greetings
-          systemResponse: {
-            type: "greeting",
-            message: response.greeting_response,
-            timestamp: new Date().toISOString(),
+        updateWorkflowState(
+          {
+            queryRejected: true,
+            showAgentFlow: false, // Don't show agent flow for greetings
+            systemResponse: {
+              type: "greeting",
+              message: response.greeting_response,
+              timestamp: new Date().toISOString(),
+            },
           },
-        });
-        addMessage("assistant", response.greeting_response, "greeting");
+          chatId,
+        );
+        addMessage("assistant", response.greeting_response, "greeting", chatId);
         setIsLoading(false);
         return;
       }
@@ -163,56 +165,84 @@ export default function GeminiDashboard() {
         const rejectionMessage =
           response.rejection_reason || "Query not related to pharmaceutical drug repurposing.";
         setApiError(rejectionMessage);
-        updateWorkflowState({
-          queryRejected: true,
-          showAgentFlow: false, // Don't show agent flow for rejections
-          systemResponse: {
-            type: "rejection",
-            message: rejectionMessage,
-            timestamp: new Date().toISOString(),
+        updateWorkflowState(
+          {
+            queryRejected: true,
+            showAgentFlow: false, // Don't show agent flow for rejections
+            systemResponse: {
+              type: "rejection",
+              message: rejectionMessage,
+              timestamp: new Date().toISOString(),
+            },
           },
-        });
-        addMessage("assistant", rejectionMessage, "rejection");
+          chatId,
+        );
+        addMessage("assistant", rejectionMessage, "rejection", chatId);
         setIsLoading(false);
         return;
       }
 
       // Store fetched data
       const newAgentData = {};
-      for (const agentId of response.agent_sequence) {
+      const agentSequence = response.agent_sequence || [];
+
+      console.log("[Dashboard] Agent sequence from API:", agentSequence);
+      console.log(
+        "[Dashboard] Extracted drug:",
+        response.drug_name,
+        "indication:",
+        response.indication,
+      );
+
+      // Update workflow state with drug name and indication
+      updateWorkflowState(
+        {
+          drugName: response.drug_name,
+          indication: response.indication,
+        },
+        chatId,
+      );
+
+      for (const agentId of agentSequence) {
         const frontendIndex = AGENT_ID_MAP[agentId];
-        newAgentData[frontendIndex] = response.agents[agentId]?.data || {};
+        if (frontendIndex !== undefined && response.agents && response.agents[agentId]) {
+          newAgentData[frontendIndex] = response.agents[agentId]?.data || {};
+        }
       }
 
       // Animate through agents sequentially
       const agentDelays = {
-        0: 800,
-        1: 800,
-        2: 800,
-        3: 800,
-        4: 800,
-        5: 800,
+        iqvia: 800,
+        exim: 800,
+        patent: 800,
+        clinical: 800,
+        internal_knowledge: 800,
+        report_generator: 800,
       };
 
       const runAgentAtIndex = (idx) => {
         const agentId = agentSequence[idx];
+        const frontendIndex = AGENT_ID_MAP[agentId];
 
-        // Update agent data for this agent
-        if (newAgentData[agentId]) {
-          updateAgentData(agentId, newAgentData[agentId]);
+        // Update agent data for this agent using numeric index
+        if (frontendIndex !== undefined && newAgentData[frontendIndex]) {
+          updateAgentData(frontendIndex, newAgentData[frontendIndex], chatId);
         }
 
         // Use function updater to get fresh state
-        updateWorkflowState((prevState) => ({
-          activeAgent: agentId,
-          showAgentDataByAgent: {
-            ...prevState.showAgentDataByAgent,
-            [agentId]: true,
-          },
-        }));
+        updateWorkflowState(
+          (prevState) => ({
+            activeAgent: agentId,
+            showAgentDataByAgent: {
+              ...prevState.showAgentDataByAgent,
+              [agentId]: true,
+            },
+          }),
+          chatId,
+        );
 
         if (!isPinned) {
-          setSelectedAgent(agentId);
+          setSelectedAgent(frontendIndex); // Set numeric index for rendering
         }
 
         setTimeout(() => {
@@ -220,15 +250,19 @@ export default function GeminiDashboard() {
           if (nextIndex < agentSequence.length) {
             runAgentAtIndex(nextIndex);
           } else {
-            updateWorkflowState({
-              workflowComplete: true,
-              reportReady: agentSequence.includes(5),
-            });
+            updateWorkflowState(
+              {
+                workflowComplete: true,
+                reportReady: agentSequence.includes("report_generator"),
+              },
+              chatId,
+            );
             setIsLoading(false);
             addMessage(
               "assistant",
               "Analysis complete. All agents have finished processing.",
               "agent-complete",
+              chatId,
             );
           }
         }, agentDelays[agentId] || 800);
@@ -267,8 +301,8 @@ export default function GeminiDashboard() {
     // Clear input
     setPrompt("");
 
-    // Add user message
-    addMessage("user", trimmed);
+    // Add user message (pass chatId for newly created chats)
+    addMessage("user", trimmed, "text", chatId);
 
     // Start workflow
     startAgentWorkflow(trimmed, chatId, promptIndex);
@@ -284,7 +318,10 @@ export default function GeminiDashboard() {
   const handleDownloadReport = async () => {
     try {
       console.log("[Dashboard] Generating PDF report...");
-      const result = await api.generatePdf("semaglutide", "general");
+      const result = await api.generatePdf(
+        workflowState.drugName || "semaglutide", // Use extracted drug name or fallback
+        workflowState.indication || "general", // Use extracted indication or fallback
+      );
       if (result.status === "success") {
         await api.downloadPdf(result.file_name);
       } else {
@@ -332,6 +369,22 @@ export default function GeminiDashboard() {
   const panelCollapsed = workflowState.panelCollapsed;
   const showAgentFlow = workflowState.showAgentFlow;
 
+  // Convert activeAgent string to numeric index for rendering
+  // activeAgent can be "iqvia", "exim", etc. or null
+  const activeAgentIndex = activeAgent !== null ? AGENT_ID_MAP[activeAgent] : null;
+
+  // Convert selectedAgent to numeric index (selectedAgent is set via setSelectedAgent)
+  // It can be either a string (from workflow) or a number (from card click)
+  const selectedAgentIndex =
+    selectedAgent !== null
+      ? typeof selectedAgent === "string"
+        ? AGENT_ID_MAP[selectedAgent]
+        : selectedAgent
+      : null;
+
+  // Current agent index for display (prefer selected, fallback to active)
+  const currentAgentIndex = selectedAgentIndex ?? activeAgentIndex;
+
   // Determine if we should show agent visualization
   const hasAgentData = Object.keys(showAgentDataByAgent).length > 0;
   // Show agents by default on landing page or during analysis
@@ -341,7 +394,7 @@ export default function GeminiDashboard() {
     (showAgentFlow && (activeAgent !== null || workflowComplete || hasAgentData));
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-zinc-950 via-zinc-900 to-zinc-950 text-zinc-100 flex">
+    <div className="min-h-screen bg-background text-foreground flex">
       {/* Chat Sidebar */}
       <ChatSidebar
         chats={chats}
@@ -359,23 +412,23 @@ export default function GeminiDashboard() {
         <div className="flex-1 overflow-hidden flex flex-col">
           {/* Agent Flow Toggle Bar - Only shows when there's agent data */}
           {hasAgentData && (
-            <div className="px-6 py-3 border-b border-zinc-800 bg-zinc-900/50 flex items-center justify-between">
+            <div className="px-6 py-3 border-b border-border bg-card/50 flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <div className="flex items-center gap-2">
-                  <Network className="text-cyan-400" size={18} />
-                  <span className="text-sm font-medium text-zinc-300">Agent Analysis</span>
+                  <Network className="text-primary" size={18} />
+                  <span className="text-sm font-medium text-foreground">Agent Analysis</span>
                   {workflowComplete ? (
-                    <span className="px-2 py-0.5 text-xs font-medium bg-green-500/20 text-green-400 rounded-full">
+                    <span className="px-2 py-0.5 text-xs font-medium bg-emerald-500/20 text-emerald-500 rounded-full">
                       Complete
                     </span>
                   ) : activeAgent !== null ? (
-                    <span className="px-2 py-0.5 text-xs font-medium bg-blue-500/20 text-blue-400 rounded-full flex items-center gap-1">
+                    <span className="px-2 py-0.5 text-xs font-medium bg-primary/20 text-primary rounded-full flex items-center gap-1">
                       <Loader2 size={10} className="animate-spin" />
                       Running
                     </span>
                   ) : null}
                 </div>
-                <span className="text-zinc-500 text-sm">
+                <span className="text-muted-foreground text-sm">
                   {Object.keys(showAgentDataByAgent).length} agent
                   {Object.keys(showAgentDataByAgent).length !== 1 ? "s" : ""} executed
                 </span>
@@ -386,8 +439,8 @@ export default function GeminiDashboard() {
                 onClick={handleToggleAgentFlow}
                 className={`px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 transition-all ${
                   showAgentFlow
-                    ? "bg-zinc-700 text-zinc-200 hover:bg-zinc-600"
-                    : "bg-gradient-to-r from-cyan-600 to-blue-600 text-white hover:from-cyan-500 hover:to-blue-500"
+                    ? "bg-muted text-foreground hover:bg-muted/80"
+                    : "bg-primary text-primary-foreground hover:bg-primary/90"
                 }`}
               >
                 {showAgentFlow ? (
@@ -406,7 +459,7 @@ export default function GeminiDashboard() {
           )}
 
           {/* Content Area */}
-          <div className="flex-1 overflow-hidden p-6">
+          <div className={`flex-1 overflow-hidden ${shouldShowAgentFlow ? "p-6" : ""}`}>
             <AnimatePresence mode="wait">
               {shouldShowAgentFlow ? (
                 /* Agent Flow Visualization */
@@ -504,11 +557,11 @@ export default function GeminiDashboard() {
                         className="relative group"
                       >
                         <motion.div
-                          className="absolute -inset-1 bg-gradient-to-r from-cyan-500 via-blue-500 to-blue-600 rounded-xl blur-xl opacity-40"
+                          className="absolute -inset-1 bg-gradient-to-r from-primary via-blue-500 to-blue-600 rounded-xl blur-xl opacity-40"
                           animate={{ opacity: [0.25, 0.4, 0.25], scale: [1, 1.02, 1] }}
                           transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
                         />
-                        <Card className="relative bg-gradient-to-r from-cyan-500 via-blue-500 to-blue-600 border-0 shadow-lg shadow-blue-500/20">
+                        <Card className="relative bg-gradient-to-r from-primary via-blue-500 to-blue-600 border-0 shadow-lg shadow-primary/20">
                           <CardContent className="p-4 px-8">
                             <div className="flex items-center justify-center gap-3">
                               <motion.div
@@ -535,7 +588,7 @@ export default function GeminiDashboard() {
                     {/* Agent Boxes */}
                     <div
                       className={`grid transition-all duration-700 items-stretch ${
-                        activeAgent !== null || workflowComplete
+                        activeAgentIndex !== null || workflowComplete
                           ? "grid-cols-1 gap-2 h-auto"
                           : "grid-cols-6 gap-3 h-auto"
                       } pb-4 relative z-10`}
@@ -616,57 +669,59 @@ export default function GeminiDashboard() {
                         },
                       ].map((agent, index) => {
                         const Icon = agent.icon;
-                        const isActive = activeAgent === agent.id;
-                        const hasData = showAgentDataByAgent[agent.id];
+                        const agentStringId = AGENT_INDEX_MAP[agent.id]; // Convert numeric id to string like "iqvia"
+                        const isActive = activeAgentIndex === agent.id;
+                        const hasData =
+                          showAgentDataByAgent[agentStringId] || showAgentDataByAgent[agent.id];
                         const colorClasses = {
                           blue: {
                             active:
                               "from-blue-900/20 border-blue-500 shadow-[0_0_20px_rgba(59,130,246,0.4)]",
-                            inactive: "from-blue-900/10 border-zinc-800 hover:border-blue-600/50",
+                            inactive: "from-blue-900/10 border-border hover:border-blue-600/50",
                             icon: "bg-blue-500/10 border-blue-500/20",
-                            iconColor: "text-blue-400",
-                            dot: "text-blue-400",
+                            iconColor: "text-blue-500",
+                            dot: "text-blue-500",
                           },
                           cyan: {
                             active:
-                              "from-cyan-900/20 border-cyan-500 shadow-[0_0_20px_rgba(6,182,212,0.4)]",
-                            inactive: "from-cyan-900/10 border-zinc-800 hover:border-cyan-600/50",
-                            icon: "bg-cyan-500/10 border-cyan-500/20",
-                            iconColor: "text-cyan-400",
-                            dot: "text-cyan-400",
+                              "from-teal-900/20 border-teal-500 shadow-[0_0_20px_rgba(6,182,212,0.4)]",
+                            inactive: "from-teal-900/10 border-border hover:border-teal-600/50",
+                            icon: "bg-teal-500/10 border-teal-500/20",
+                            iconColor: "text-teal-500",
+                            dot: "text-teal-500",
                           },
                           amber: {
                             active:
                               "from-amber-900/20 border-amber-500 shadow-[0_0_20px_rgba(245,158,11,0.4)]",
-                            inactive: "from-amber-900/10 border-zinc-800 hover:border-amber-600/50",
+                            inactive: "from-amber-900/10 border-border hover:border-amber-600/50",
                             icon: "bg-amber-500/10 border-amber-500/20",
-                            iconColor: "text-amber-400",
-                            dot: "text-amber-400",
+                            iconColor: "text-amber-500",
+                            dot: "text-amber-500",
                           },
                           green: {
                             active:
-                              "from-green-900/20 border-green-500 shadow-[0_0_20px_rgba(34,197,94,0.4)]",
-                            inactive: "from-green-900/10 border-zinc-800 hover:border-green-600/50",
-                            icon: "bg-green-500/10 border-green-500/20",
-                            iconColor: "text-green-400",
-                            dot: "text-green-400",
+                              "from-emerald-900/20 border-emerald-500 shadow-[0_0_20px_rgba(34,197,94,0.4)]",
+                            inactive:
+                              "from-emerald-900/10 border-border hover:border-emerald-600/50",
+                            icon: "bg-emerald-500/10 border-emerald-500/20",
+                            iconColor: "text-emerald-500",
+                            dot: "text-emerald-500",
                           },
                           pink: {
                             active:
                               "from-pink-900/20 border-pink-500 shadow-[0_0_20px_rgba(236,72,153,0.4)]",
-                            inactive: "from-pink-900/10 border-zinc-800 hover:border-pink-600/50",
+                            inactive: "from-pink-900/10 border-border hover:border-pink-600/50",
                             icon: "bg-pink-500/10 border-pink-500/20",
-                            iconColor: "text-pink-400",
-                            dot: "text-pink-400",
+                            iconColor: "text-pink-500",
+                            dot: "text-pink-500",
                           },
                           purple: {
                             active:
-                              "from-purple-900/20 border-purple-500 shadow-[0_0_20px_rgba(168,85,247,0.4)]",
-                            inactive:
-                              "from-purple-900/10 border-zinc-800 hover:border-purple-600/50",
-                            icon: "bg-purple-500/10 border-purple-500/20",
-                            iconColor: "text-purple-400",
-                            dot: "text-purple-400",
+                              "from-violet-900/20 border-violet-500 shadow-[0_0_20px_rgba(168,85,247,0.4)]",
+                            inactive: "from-violet-900/10 border-border hover:border-violet-600/50",
+                            icon: "bg-violet-500/10 border-violet-500/20",
+                            iconColor: "text-violet-500",
+                            dot: "text-violet-500",
                           },
                         };
                         const colors = colorClasses[agent.color];
@@ -689,30 +744,30 @@ export default function GeminiDashboard() {
                                 isActive
                                   ? `bg-gradient-to-br ${colors.active} to-zinc-900`
                                   : `bg-gradient-to-br ${colors.inactive} to-zinc-900 hover:scale-[1.02]`
-                              } ${activeAgent !== null || workflowComplete ? "h-auto" : "h-full min-h-[185px]"} ${
+                              } ${activeAgentIndex !== null || workflowComplete ? "h-auto" : "h-full min-h-[185px]"} ${
                                 hasData ? "cursor-pointer" : "cursor-default"
                               }`}
                               onClick={() => {
                                 if (!hasData) return;
-                                setIsPinned(activeAgent !== agent.id);
-                                setSelectedAgent(agent.id);
+                                setIsPinned(activeAgentIndex !== agent.id);
+                                setSelectedAgent(agent.id); // Keep as numeric for rendering
                               }}
                             >
                               <CardContent
                                 className={`${
-                                  activeAgent !== null || workflowComplete
+                                  activeAgentIndex !== null || workflowComplete
                                     ? "p-2.5 flex flex-row items-center gap-2.5"
                                     : "p-3 flex flex-col h-full"
                                 }`}
                               >
                                 <div
                                   className={`flex items-center gap-2 shrink-0 ${
-                                    activeAgent === null && !workflowComplete ? "mb-2" : ""
+                                    activeAgentIndex === null && !workflowComplete ? "mb-2" : ""
                                   }`}
                                 >
                                   <motion.div
                                     className={`${
-                                      activeAgent !== null || workflowComplete
+                                      activeAgentIndex !== null || workflowComplete
                                         ? "p-1.5 rounded-lg"
                                         : "p-2 rounded-lg"
                                     } ${colors.icon} border`}
@@ -720,13 +775,13 @@ export default function GeminiDashboard() {
                                   >
                                     <Icon
                                       className={colors.iconColor}
-                                      size={activeAgent !== null || workflowComplete ? 16 : 18}
+                                      size={activeAgentIndex !== null || workflowComplete ? 16 : 18}
                                     />
                                   </motion.div>
                                   <div className="flex-1 min-w-0">
                                     <h3
-                                      className={`font-semibold text-zinc-100 ${
-                                        activeAgent !== null || workflowComplete
+                                      className={`font-semibold text-foreground ${
+                                        activeAgentIndex !== null || workflowComplete
                                           ? "text-xs"
                                           : "text-sm"
                                       } truncate`}
@@ -734,7 +789,7 @@ export default function GeminiDashboard() {
                                       {agent.name}
                                     </h3>
                                     {(activeAgent !== null || workflowComplete) && (
-                                      <p className="text-[10px] text-zinc-400 truncate leading-tight">
+                                      <p className="text-[10px] text-muted-foreground truncate leading-tight">
                                         {agent.desc}
                                       </p>
                                     )}
@@ -746,8 +801,8 @@ export default function GeminiDashboard() {
                                     />
                                   )}
                                 </div>
-                                {activeAgent === null && !workflowComplete && (
-                                  <div className="mt-3 flex-1 flex flex-col text-xs text-zinc-400 gap-2">
+                                {activeAgentIndex === null && !workflowComplete && (
+                                  <div className="mt-3 flex-1 flex flex-col text-xs text-muted-foreground gap-2">
                                     {agent.features.map((feature, i) => (
                                       <motion.div
                                         key={i}
@@ -774,7 +829,7 @@ export default function GeminiDashboard() {
 
                   {/* Right Panel - Agent Details */}
                   <AnimatePresence>
-                    {(activeAgent !== null || workflowComplete) &&
+                    {(activeAgentIndex !== null || workflowComplete) &&
                       !queryRejected &&
                       !panelCollapsed && (
                         <motion.div
@@ -784,103 +839,95 @@ export default function GeminiDashboard() {
                           transition={{ duration: 0.7 }}
                           className="flex-1 h-full pb-2"
                         >
-                          <Card className="bg-zinc-900 border-zinc-800 h-full">
+                          <Card className="bg-card border-border h-full">
                             <CardContent className="p-6 pb-8 h-full flex flex-col">
-                              <div className="flex items-center justify-between gap-3 mb-6 pb-4 border-b border-zinc-800">
+                              <div className="flex items-center justify-between gap-3 mb-6 pb-4 border-b border-border">
                                 <div className="flex items-center gap-3">
-                                  {(selectedAgent ?? activeAgent) === 0 && (
-                                    <TrendingUp className="text-blue-400" size={24} />
+                                  {currentAgentIndex === 0 && (
+                                    <TrendingUp className="text-blue-500" size={24} />
                                   )}
-                                  {(selectedAgent ?? activeAgent) === 1 && (
-                                    <Network className="text-cyan-400" size={24} />
+                                  {currentAgentIndex === 1 && (
+                                    <Network className="text-teal-500" size={24} />
                                   )}
-                                  {(selectedAgent ?? activeAgent) === 2 && (
-                                    <Scale className="text-amber-400" size={24} />
+                                  {currentAgentIndex === 2 && (
+                                    <Scale className="text-amber-500" size={24} />
                                   )}
-                                  {(selectedAgent ?? activeAgent) === 3 && (
-                                    <Microscope className="text-green-400" size={24} />
+                                  {currentAgentIndex === 3 && (
+                                    <Microscope className="text-emerald-500" size={24} />
                                   )}
-                                  {(selectedAgent ?? activeAgent) === 4 && (
-                                    <Database className="text-pink-400" size={24} />
+                                  {currentAgentIndex === 4 && (
+                                    <Database className="text-pink-500" size={24} />
                                   )}
-                                  {(selectedAgent ?? activeAgent) === 5 && (
-                                    <FileText className="text-purple-400" size={24} />
+                                  {currentAgentIndex === 5 && (
+                                    <FileText className="text-violet-500" size={24} />
                                   )}
-                                  <h2 className="text-xl font-bold text-zinc-100">
-                                    {(selectedAgent ?? activeAgent) === 0 &&
-                                      "IQVIA Market Insights"}
-                                    {(selectedAgent ?? activeAgent) === 1 && "Exim Trends Analysis"}
-                                    {(selectedAgent ?? activeAgent) === 2 && "Patent Landscape"}
-                                    {(selectedAgent ?? activeAgent) === 3 &&
-                                      "Clinical Trial Analysis"}
-                                    {(selectedAgent ?? activeAgent) === 4 &&
-                                      "Internal Knowledge Base"}
-                                    {(selectedAgent ?? activeAgent) === 5 && "Report Generation"}
+                                  <h2 className="text-xl font-bold text-foreground">
+                                    {currentAgentIndex === 0 && "IQVIA Market Insights"}
+                                    {currentAgentIndex === 1 && "Exim Trends Analysis"}
+                                    {currentAgentIndex === 2 && "Patent Landscape"}
+                                    {currentAgentIndex === 3 && "Clinical Trial Analysis"}
+                                    {currentAgentIndex === 4 && "Internal Knowledge Base"}
+                                    {currentAgentIndex === 5 && "Report Generation"}
                                   </h2>
                                 </div>
                               </div>
 
                               <ScrollArea className="flex-1">
-                                {!showAgentDataByAgent[selectedAgent ?? activeAgent ?? -1] ? (
+                                {!agentData[currentAgentIndex] ? (
                                   <div className="flex flex-col items-center justify-center h-full gap-4">
-                                    <Loader2 className="animate-spin text-blue-500" size={48} />
-                                    <p className="text-zinc-400 text-lg">
-                                      {(selectedAgent ?? activeAgent) === 0 &&
-                                        "Fetching market data..."}
-                                      {(selectedAgent ?? activeAgent) === 1 &&
+                                    <Loader2 className="animate-spin text-primary" size={48} />
+                                    <p className="text-muted-foreground text-lg">
+                                      {currentAgentIndex === 0 && "Fetching market data..."}
+                                      {currentAgentIndex === 1 &&
                                         "Analyzing export-import trends..."}
-                                      {(selectedAgent ?? activeAgent) === 2 &&
-                                        "Querying patent databases..."}
-                                      {(selectedAgent ?? activeAgent) === 3 &&
-                                        "Searching trial databases..."}
-                                      {(selectedAgent ?? activeAgent) === 4 &&
+                                      {currentAgentIndex === 2 && "Querying patent databases..."}
+                                      {currentAgentIndex === 3 && "Searching trial databases..."}
+                                      {currentAgentIndex === 4 &&
                                         "Searching internal knowledge base..."}
-                                      {(selectedAgent ?? activeAgent) === 5 &&
-                                        "Aggregating agent outputs..."}
+                                      {currentAgentIndex === 5 && "Aggregating agent outputs..."}
                                     </p>
                                   </div>
                                 ) : (
-                                  <div className="space-y-6 text-zinc-300 leading-relaxed">
+                                  <div className="space-y-6 text-foreground leading-relaxed">
                                     {(() => {
-                                      const currentAgentId = selectedAgent ?? activeAgent;
-                                      const currentData = agentData[currentAgentId];
+                                      const currentData = agentData[currentAgentIndex];
                                       const hasApiData =
                                         currentData && Object.keys(currentData).length > 0;
 
                                       if (hasApiData) {
                                         return (
                                           <>
-                                            {currentAgentId === 0 && (
+                                            {currentAgentIndex === 0 && (
                                               <IQVIADataDisplay
                                                 data={currentData}
                                                 isFirstPrompt={true}
                                               />
                                             )}
-                                            {currentAgentId === 1 && (
+                                            {currentAgentIndex === 1 && (
                                               <EXIMDataDisplay
                                                 data={currentData}
                                                 showChart={true}
                                               />
                                             )}
-                                            {currentAgentId === 2 && (
+                                            {currentAgentIndex === 2 && (
                                               <PatentDataDisplay
                                                 data={currentData}
                                                 isFirstPrompt={true}
                                               />
                                             )}
-                                            {currentAgentId === 3 && (
+                                            {currentAgentIndex === 3 && (
                                               <ClinicalDataDisplay
                                                 data={currentData}
                                                 isFirstPrompt={true}
                                               />
                                             )}
-                                            {currentAgentId === 4 && (
+                                            {currentAgentIndex === 4 && (
                                               <InternalKnowledgeDataDisplay
                                                 data={currentData}
                                                 isFirstPrompt={true}
                                               />
                                             )}
-                                            {currentAgentId === 5 && (
+                                            {currentAgentIndex === 5 && (
                                               <ReportGeneratorDataDisplay
                                                 data={currentData}
                                                 isFirstPrompt={true}
@@ -915,10 +962,10 @@ export default function GeminiDashboard() {
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -20 }}
-                  className="h-full max-w-4xl mx-auto flex flex-col"
+                  className="h-full flex flex-col"
                 >
                   <ScrollArea className="flex-1">
-                    <div className="space-y-4 py-4">
+                    <div className="space-y-4 py-4 max-w-4xl mx-auto px-6">
                       {!activeChat || activeChat.messages.length === 0 ? (
                         /* Welcome Screen */
                         <div className="flex flex-col items-center justify-center h-full text-center px-8 py-8">
@@ -928,13 +975,13 @@ export default function GeminiDashboard() {
                             transition={{ duration: 0.5 }}
                             className="mb-8"
                           >
-                            <div className="w-20 h-20 bg-gradient-to-br from-cyan-500 to-blue-600 rounded-2xl flex items-center justify-center mb-6 mx-auto shadow-xl shadow-cyan-500/20">
+                            <div className="w-20 h-20 bg-gradient-to-br from-primary to-blue-600 rounded-2xl flex items-center justify-center mb-6 mx-auto shadow-xl shadow-primary/20">
                               <Network className="text-white" size={40} />
                             </div>
-                            <h1 className="text-3xl font-bold text-zinc-100 mb-3">
+                            <h1 className="text-3xl font-bold text-foreground mb-3">
                               Welcome to PharmAssist
                             </h1>
-                            <p className="text-zinc-400 max-w-lg">
+                            <p className="text-muted-foreground max-w-lg">
                               Your AI-powered pharmaceutical intelligence assistant. I can analyze
                               drug repurposing opportunities, clinical trials, patents, and market
                               data.
@@ -951,7 +998,7 @@ export default function GeminiDashboard() {
                                 initial={{ opacity: 0, y: 20 }}
                                 animate={{ opacity: 1, y: 0 }}
                                 transition={{ delay: 0.2 + idx * 0.1 }}
-                                className={`p-4 rounded-xl bg-zinc-800/50 border border-zinc-700/50 hover:border-${item.color}-500/50 transition-all cursor-pointer group`}
+                                className={`p-4 rounded-xl bg-card border border-border hover:border-${item.color}-500/50 transition-all cursor-pointer group`}
                                 onClick={() => {
                                   setPrompt(`Analyze ${item.text.toLowerCase()} for Semaglutide`);
                                 }}
@@ -960,7 +1007,7 @@ export default function GeminiDashboard() {
                                   className={`text-${item.color}-400 mb-2 group-hover:scale-110 transition-transform`}
                                   size={24}
                                 />
-                                <p className="text-sm text-zinc-300">{item.text}</p>
+                                <p className="text-sm text-foreground">{item.text}</p>
                               </motion.div>
                             ))}
                           </div>
@@ -977,20 +1024,20 @@ export default function GeminiDashboard() {
                             <div
                               className={`max-w-[80%] rounded-2xl px-4 py-3 ${
                                 msg.role === "user"
-                                  ? "bg-purple-600 text-white"
+                                  ? "bg-primary text-primary-foreground"
                                   : msg.type === "greeting"
-                                    ? "bg-gradient-to-br from-purple-500/20 to-blue-500/20 border border-purple-500/30 text-zinc-100"
+                                    ? "bg-gradient-to-br from-primary/20 to-blue-500/20 border border-primary/30 text-foreground"
                                     : msg.type === "rejection"
-                                      ? "bg-red-500/20 border border-red-500/30 text-zinc-100"
+                                      ? "bg-destructive/20 border border-destructive/30 text-foreground"
                                       : msg.type === "agent-complete"
-                                        ? "bg-green-500/20 border border-green-500/30 text-zinc-100"
-                                        : "bg-zinc-800 text-zinc-100"
+                                        ? "bg-emerald-500/20 border border-emerald-500/30 text-foreground"
+                                        : "bg-muted text-foreground"
                               }`}
                             >
                               {msg.role === "assistant" && (
                                 <div className="flex items-center gap-2 mb-2">
-                                  <Sparkles className="text-purple-400" size={14} />
-                                  <span className="text-xs font-medium text-purple-400">
+                                  <Sparkles className="text-primary" size={14} />
+                                  <span className="text-xs font-medium text-primary">
                                     PharmAssist
                                   </span>
                                 </div>
@@ -1004,7 +1051,7 @@ export default function GeminiDashboard() {
                                   whileHover={{ scale: 1.02 }}
                                   whileTap={{ scale: 0.98 }}
                                   onClick={handleDownloadReport}
-                                  className="mt-3 w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 text-white rounded-xl font-medium text-sm transition-all shadow-lg shadow-purple-500/20"
+                                  className="mt-3 w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-primary hover:bg-primary/90 text-primary-foreground rounded-xl font-medium text-sm transition-all shadow-lg shadow-primary/20"
                                 >
                                   <Download size={16} />
                                   Download Report
@@ -1020,9 +1067,11 @@ export default function GeminiDashboard() {
                           animate={{ opacity: 1 }}
                           className="flex justify-start"
                         >
-                          <div className="bg-zinc-800 rounded-2xl px-4 py-3 flex items-center gap-3">
-                            <Loader2 className="animate-spin text-purple-400" size={16} />
-                            <span className="text-sm text-zinc-400">Analyzing your query...</span>
+                          <div className="bg-muted rounded-2xl px-4 py-3 flex items-center gap-3">
+                            <Loader2 className="animate-spin text-primary" size={16} />
+                            <span className="text-sm text-muted-foreground">
+                              Analyzing your query...
+                            </span>
                           </div>
                         </motion.div>
                       )}
@@ -1035,7 +1084,7 @@ export default function GeminiDashboard() {
         </div>
 
         {/* Input */}
-        <div className="border-t border-zinc-800 p-4">
+        <div className="border-t border-border p-4 bg-card">
           <div className="max-w-3xl mx-auto">
             <div className="flex items-center gap-2">
               <Input
@@ -1046,7 +1095,7 @@ export default function GeminiDashboard() {
                       ? "Type your question..."
                       : "Continue analyzing..."
                 }
-                className="flex-1 h-12 bg-zinc-900 border-zinc-800 rounded-xl text-sm placeholder:text-zinc-500 focus-visible:ring-0 focus-visible:ring-offset-0"
+                className="flex-1 h-12 bg-background border-border rounded-xl text-sm placeholder:text-muted-foreground focus-visible:ring-1 focus-visible:ring-primary"
                 value={prompt}
                 onChange={(e) => setPrompt(e.target.value)}
                 onKeyPress={handleKeyPress}
@@ -1057,10 +1106,10 @@ export default function GeminiDashboard() {
                 whileTap={{ scale: 0.95 }}
                 onClick={handleSendPrompt}
                 disabled={isLoading || !prompt.trim()}
-                className={`h-12 px-5 rounded-xl font-semibold flex items-center gap-2 transition-all duration-200 shadow-lg ${
+                className={`h-12 px-5 rounded-xl font-semibold flex items-center gap-2 transition-all duration-200 shadow-lg text-primary-foreground ${
                   isLoading || !prompt.trim()
-                    ? "bg-purple-600/50 cursor-not-allowed"
-                    : "bg-purple-600 hover:bg-purple-700 shadow-purple-500/20"
+                    ? "bg-primary/50 cursor-not-allowed"
+                    : "bg-primary hover:bg-primary/90 shadow-primary/20"
                 }`}
               >
                 {isLoading ? <Loader2 className="animate-spin" size={16} /> : <Send size={16} />}

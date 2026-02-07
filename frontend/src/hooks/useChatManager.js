@@ -95,6 +95,8 @@ export function useChatManager() {
         systemResponse: null,
         panelCollapsed: false,
         showAgentFlow: false, // Only true during actual analysis workflow
+        drugName: null, // Extracted drug name from LLM
+        indication: null, // Extracted indication from LLM
       },
     };
     setChats((prev) => [...prev, newChat]);
@@ -137,10 +139,11 @@ export function useChatManager() {
     );
   }, []);
 
-  // Add a message to the active chat
+  // Add a message to a chat (uses activeChatId if targetChatId not provided)
   const addMessage = useCallback(
-    (role, content, type = "text") => {
-      if (!activeChatId) return null;
+    (role, content, type = "text", targetChatId = null) => {
+      const chatId = targetChatId || activeChatId;
+      if (!chatId) return null;
 
       const message = {
         id: Date.now(),
@@ -152,7 +155,7 @@ export function useChatManager() {
 
       setChats((prev) =>
         prev.map((chat) => {
-          if (chat.id !== activeChatId) return chat;
+          if (chat.id !== chatId) return chat;
 
           const updatedMessages = [...chat.messages, message];
           // Auto-update title from first user message
@@ -173,14 +176,15 @@ export function useChatManager() {
     [activeChatId],
   );
 
-  // Update agent data for the active chat
+  // Update agent data for a chat (uses activeChatId if targetChatId not provided)
   const updateAgentData = useCallback(
-    (agentId, data) => {
-      if (!activeChatId) return;
+    (agentId, data, targetChatId = null) => {
+      const chatId = targetChatId || activeChatId;
+      if (!chatId) return;
 
       setChats((prev) =>
         prev.map((chat) =>
-          chat.id === activeChatId
+          chat.id === chatId
             ? {
                 ...chat,
                 agentData: { ...chat.agentData, [agentId]: data },
@@ -193,14 +197,15 @@ export function useChatManager() {
     [activeChatId],
   );
 
-  // Update workflow state for the active chat
+  // Update workflow state for a chat (uses activeChatId if targetChatId not provided)
   const updateWorkflowState = useCallback(
-    (updatesOrFn) => {
-      if (!activeChatId) return;
+    (updatesOrFn, targetChatId = null) => {
+      const chatId = targetChatId || activeChatId;
+      if (!chatId) return;
 
       setChats((prev) =>
         prev.map((chat) => {
-          if (chat.id !== activeChatId) return chat;
+          if (chat.id !== chatId) return chat;
 
           // Support both object and function updaters
           const updates =
@@ -236,6 +241,8 @@ export function useChatManager() {
                   systemResponse: null,
                   panelCollapsed: false,
                   showAgentFlow: false,
+                  drugName: null,
+                  indication: null,
                 },
                 agentData: {},
               }

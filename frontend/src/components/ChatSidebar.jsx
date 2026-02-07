@@ -209,7 +209,7 @@ export function ChatSidebar({
         }}
       >
         {isEditing ? (
-          <div className="flex items-center gap-1.5 px-2 py-2 bg-zinc-800 rounded-xl border border-cyan-500/30">
+          <div className="flex items-center gap-1.5 px-2 py-2 bg-muted rounded-xl border border-primary/30">
             <input
               ref={editInputRef}
               type="text"
@@ -217,17 +217,17 @@ export function ChatSidebar({
               onChange={(e) => setEditTitle(e.target.value)}
               onKeyDown={handleKeyDown}
               onBlur={handleSaveEdit}
-              className="flex-1 bg-zinc-900 text-zinc-100 text-sm px-3 py-1.5 rounded-lg outline-none border border-zinc-700 focus:border-cyan-500 transition-colors"
+              className="flex-1 bg-background text-foreground text-sm px-3 py-1.5 rounded-lg outline-none border border-border focus:border-primary transition-colors"
             />
             <button
               onClick={handleSaveEdit}
-              className="p-1.5 hover:bg-green-500/20 rounded-lg text-green-400 transition-colors"
+              className="p-1.5 hover:bg-emerald-500/20 rounded-lg text-emerald-500 transition-colors"
             >
               <Check size={14} />
             </button>
             <button
               onClick={handleCancelEdit}
-              className="p-1.5 hover:bg-red-500/20 rounded-lg text-red-400 transition-colors"
+              className="p-1.5 hover:bg-destructive/20 rounded-lg text-destructive transition-colors"
             >
               <X size={14} />
             </button>
@@ -237,26 +237,29 @@ export function ChatSidebar({
             onClick={() => onSelectChat(chat.id)}
             className={`relative flex items-center gap-3 px-3 py-3 rounded-xl cursor-pointer transition-all duration-200 ${
               isActive
-                ? "bg-gradient-to-r from-cyan-500/15 to-blue-500/15 border border-cyan-500/25 shadow-lg shadow-cyan-500/5"
-                : "hover:bg-zinc-800/60 border border-transparent"
+                ? "bg-primary/10 border border-primary/25 shadow-lg shadow-primary/5"
+                : "hover:bg-muted border border-transparent"
             }`}
           >
             <div
               className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${
-                isActive ? "bg-cyan-500/20" : "bg-zinc-800"
+                isActive ? "bg-primary/20" : "bg-muted"
               }`}
             >
-              <MessageSquare size={14} className={isActive ? "text-cyan-400" : "text-zinc-500"} />
+              <MessageSquare
+                size={14}
+                className={isActive ? "text-primary" : "text-muted-foreground"}
+              />
             </div>
             <div className="flex-1 min-w-0">
               <p
                 className={`text-sm font-medium truncate ${
-                  isActive ? "text-white" : "text-zinc-300"
+                  isActive ? "text-foreground" : "text-foreground/80"
                 }`}
               >
                 {chat.title}
               </p>
-              <p className="text-xs text-zinc-500 truncate mt-0.5">
+              <p className="text-xs text-muted-foreground truncate mt-0.5">
                 {chat.messages && chat.messages.length > 0
                   ? `${chat.messages.filter((m) => m.role === "user").length} message${chat.messages.filter((m) => m.role === "user").length !== 1 ? "s" : ""}`
                   : "No messages yet"}
@@ -271,14 +274,14 @@ export function ChatSidebar({
                   animate={{ opacity: 1, scale: 1 }}
                   exit={{ opacity: 0, scale: 0.9 }}
                   transition={{ duration: 0.1 }}
-                  className="flex items-center gap-0.5 bg-zinc-900/90 rounded-lg p-0.5"
+                  className="flex items-center gap-0.5 bg-background/90 rounded-lg p-0.5"
                 >
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
                       handleStartEdit(chat);
                     }}
-                    className="p-1.5 hover:bg-zinc-700 rounded text-zinc-400 hover:text-zinc-100 transition-colors"
+                    className="p-1.5 hover:bg-muted rounded text-muted-foreground hover:text-foreground transition-colors"
                     title="Rename"
                   >
                     <Edit2 size={14} />
@@ -288,7 +291,7 @@ export function ChatSidebar({
                       e.stopPropagation();
                       handleDelete(chat.id);
                     }}
-                    className="p-1.5 hover:bg-red-500/20 rounded text-zinc-400 hover:text-red-400 transition-colors"
+                    className="p-1.5 hover:bg-destructive/20 rounded text-muted-foreground hover:text-destructive transition-colors"
                     title="Delete"
                   >
                     <Trash2 size={14} />
@@ -308,10 +311,10 @@ export function ChatSidebar({
     return (
       <div key={title} className="mb-5">
         <div className="flex items-center gap-2 px-3 mb-2">
-          <p className="text-[11px] font-semibold text-zinc-500 uppercase tracking-wider">
+          <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
             {title}
           </p>
-          <div className="flex-1 h-px bg-zinc-800/50"></div>
+          <div className="flex-1 h-px bg-border"></div>
         </div>
         <div className="space-y-1">
           <AnimatePresence>{chatList.map(renderChatItem)}</AnimatePresence>
@@ -321,11 +324,14 @@ export function ChatSidebar({
   };
 
   return (
-    <div className="w-72 min-w-[288px] bg-gradient-to-b from-zinc-950 via-zinc-950 to-zinc-900 border-r border-zinc-800/80 flex flex-col h-screen">
+    <div className="w-72 min-w-[288px] bg-card border-r border-border flex flex-col h-screen">
       {/* Logo/Brand Header */}
-      <div className="p-4 border-b border-zinc-800/50">
-        <div className="flex items-center gap-3 mb-4">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center shadow-lg shadow-cyan-500/20">
+      <div className="p-4 border-b border-border">
+        <button
+          onClick={() => onSelectChat(null)}
+          className="flex items-center gap-3 mb-4 w-full hover:opacity-80 transition-opacity cursor-pointer group"
+        >
+          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary to-blue-600 flex items-center justify-center shadow-lg shadow-primary/20 group-hover:scale-105 transition-transform">
             <svg
               xmlns="http://www.w3.org/2000/svg"
               viewBox="0 0 24 24"
@@ -336,19 +342,27 @@ export function ChatSidebar({
               strokeLinejoin="round"
               className="w-5 h-5 text-white"
             >
-              <path d="M19.5 12.572l-7.5 7.428l-7.5 -7.428a5 5 0 1 1 7.5 -6.566a5 5 0 1 1 7.5 6.572" />
+              <circle cx="12" cy="12" r="1" />
+              <circle cx="19" cy="5" r="1" />
+              <circle cx="5" cy="19" r="1" />
+              <circle cx="19" cy="19" r="1" />
+              <line x1="12" y1="12" x2="19" y2="5" />
+              <line x1="12" y1="12" x2="5" y2="19" />
+              <line x1="12" y1="12" x2="19" y2="19" />
             </svg>
           </div>
-          <div>
-            <h1 className="text-lg font-bold text-white">PharmAssist</h1>
-            <p className="text-xs text-zinc-500">Drug Repurposing AI</p>
+          <div className="text-left">
+            <h1 className="text-lg font-bold text-foreground group-hover:text-primary transition-colors">
+              PharmAssist
+            </h1>
+            <p className="text-xs text-muted-foreground">Drug Repurposing AI</p>
           </div>
-        </div>
+        </button>
         <motion.button
           whileHover={{ scale: 1.02, y: -1 }}
           whileTap={{ scale: 0.98 }}
           onClick={onNewChat}
-          className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl font-semibold text-white transition-all duration-300 bg-gradient-to-r from-cyan-500 via-blue-500 to-blue-600 hover:from-cyan-400 hover:via-blue-400 hover:to-blue-500 shadow-lg shadow-blue-500/25 hover:shadow-blue-500/40"
+          className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl font-semibold text-primary-foreground transition-all duration-300 bg-primary hover:bg-primary/90 shadow-lg shadow-primary/25 hover:shadow-primary/40"
         >
           <Plus size={18} />
           <span>New Analysis</span>
@@ -356,20 +370,23 @@ export function ChatSidebar({
       </div>
 
       {/* Search */}
-      <div className="px-4 py-3 border-b border-zinc-800/30">
+      <div className="px-4 py-3 border-b border-border">
         <div className="relative">
-          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" />
+          <Search
+            size={16}
+            className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+          />
           <input
             type="text"
             placeholder="Search conversations..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full bg-zinc-900/80 border border-zinc-800/50 rounded-xl pl-10 pr-8 py-2.5 text-sm text-zinc-100 placeholder:text-zinc-500 outline-none focus:border-cyan-500/50 focus:bg-zinc-900 transition-all duration-200"
+            className="w-full bg-background border border-border rounded-xl pl-10 pr-8 py-2.5 text-sm text-foreground placeholder:text-muted-foreground outline-none focus:border-primary/50 focus:bg-background transition-all duration-200"
           />
           {searchQuery && (
             <button
               onClick={() => setSearchQuery("")}
-              className="absolute right-3 top-1/2 -translate-y-1/2 p-0.5 hover:bg-zinc-700 rounded text-zinc-500 hover:text-zinc-300"
+              className="absolute right-3 top-1/2 -translate-y-1/2 p-0.5 hover:bg-muted rounded text-muted-foreground hover:text-foreground"
             >
               <X size={14} />
             </button>
@@ -381,13 +398,13 @@ export function ChatSidebar({
       <ScrollArea className="flex-1 px-3 py-3">
         {sortedChats.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-12 text-center px-4">
-            <div className="w-16 h-16 rounded-2xl bg-zinc-800/50 flex items-center justify-center mb-4">
-              <MessageSquare size={28} className="text-zinc-600" />
+            <div className="w-16 h-16 rounded-2xl bg-muted flex items-center justify-center mb-4">
+              <MessageSquare size={28} className="text-muted-foreground" />
             </div>
-            <p className="text-sm font-medium text-zinc-400">
+            <p className="text-sm font-medium text-foreground">
               {searchQuery ? "No conversations found" : "No conversations yet"}
             </p>
-            <p className="text-xs text-zinc-600 mt-1.5 max-w-[180px]">
+            <p className="text-xs text-muted-foreground mt-1.5 max-w-[180px]">
               {searchQuery
                 ? "Try a different search term"
                 : "Start a new analysis to begin exploring drug repurposing opportunities"}
@@ -412,25 +429,25 @@ export function ChatSidebar({
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 20 }}
             transition={{ duration: 0.2 }}
-            className="mx-3 mb-3 p-3 bg-zinc-800 border border-zinc-700 rounded-xl shadow-lg"
+            className="mx-3 mb-3 p-3 bg-card border border-border rounded-xl shadow-lg"
           >
             <div className="flex items-center justify-between gap-2">
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-zinc-200 truncate">{deletedChat.title}</p>
-                <p className="text-xs text-zinc-500">Chat deleted</p>
+                <p className="text-sm font-medium text-foreground truncate">{deletedChat.title}</p>
+                <p className="text-xs text-muted-foreground">Chat deleted</p>
               </div>
               <div className="flex items-center gap-1">
                 <motion.button
                   whileHover={{ scale: 1.05 }}
                   whileTap={{ scale: 0.95 }}
                   onClick={handleUndo}
-                  className="px-3 py-1.5 bg-cyan-500 hover:bg-cyan-600 text-white text-xs font-semibold rounded-lg transition-colors"
+                  className="px-3 py-1.5 bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-semibold rounded-lg transition-colors"
                 >
                   Undo
                 </motion.button>
                 <button
                   onClick={handleDismissUndo}
-                  className="p-1.5 hover:bg-zinc-700 rounded-lg text-zinc-400 hover:text-zinc-300 transition-colors"
+                  className="p-1.5 hover:bg-muted rounded-lg text-muted-foreground hover:text-foreground transition-colors"
                 >
                   <X size={14} />
                 </button>
@@ -441,15 +458,15 @@ export function ChatSidebar({
       </AnimatePresence>
 
       {/* Footer */}
-      <div className="p-4 border-t border-zinc-800/50 bg-zinc-950/50">
+      <div className="p-4 border-t border-border bg-card">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
-            <span className="text-xs text-zinc-500">
+            <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
+            <span className="text-xs text-muted-foreground">
               {chats.length} conversation{chats.length !== 1 ? "s" : ""}
             </span>
           </div>
-          <div className="text-xs text-zinc-600">v1.0</div>
+          <div className="text-xs text-muted-foreground">v1.0</div>
         </div>
       </div>
     </div>

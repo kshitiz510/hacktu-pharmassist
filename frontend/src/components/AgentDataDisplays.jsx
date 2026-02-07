@@ -22,12 +22,12 @@ export function IQVIADataDisplay({ data, isFirstPrompt }) {
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.1 }}
           >
-            <h3 className="text-blue-400 font-semibold mb-3 text-lg">{marketForecast.title}</h3>
+            <h3 className="text-blue-500 font-semibold mb-3 text-lg">{marketForecast.title}</h3>
 
-            <div className="bg-zinc-800/50 rounded-lg p-6">
+            <div className="bg-muted rounded-lg p-6">
               <div className="space-y-4">
                 <div className="flex items-end justify-between h-56">
-                  <div className="flex flex-col justify-between h-full text-xs text-zinc-400 pr-3 w-12">
+                  <div className="flex flex-col justify-between h-full text-xs text-muted-foreground pr-3 w-12">
                     <span>$35B</span>
                     <span>$30B</span>
                     <span>$25B</span>
@@ -40,7 +40,7 @@ export function IQVIADataDisplay({ data, isFirstPrompt }) {
                   <div className="flex-1 flex items-end justify-around h-full relative">
                     <div className="absolute inset-0 flex flex-col justify-between">
                       {[...Array(7)].map((_, i) => (
-                        <div key={i} className="border-t border-zinc-700/50" />
+                        <div key={i} className="border-t border-border" />
                       ))}
                     </div>
 
@@ -70,18 +70,18 @@ export function IQVIADataDisplay({ data, isFirstPrompt }) {
                   </div>
                 </div>
 
-                <div className="flex justify-around text-xs text-zinc-400 pt-2 border-t border-zinc-700">
+                <div className="flex justify-around text-xs text-muted-foreground pt-2 border-t border-border">
                   {marketForecast.data?.map((item) => (
                     <div key={item.year} className="text-center">
-                      <div className="font-medium text-zinc-300">{item.year}</div>
-                      <div className="text-blue-400 font-semibold mt-1">${item.value}B</div>
+                      <div className="font-medium text-foreground">{item.year}</div>
+                      <div className="text-blue-500 font-semibold mt-1">${item.value}B</div>
                     </div>
                   ))}
                 </div>
               </div>
             </div>
 
-            <p className="mt-3 text-sm text-zinc-400">{marketForecast.description}</p>
+            <p className="mt-3 text-sm text-muted-foreground">{marketForecast.description}</p>
           </motion.div>
         )}
 
@@ -92,15 +92,15 @@ export function IQVIADataDisplay({ data, isFirstPrompt }) {
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.3 }}
           >
-            <h3 className="text-green-400 font-semibold mb-3 text-lg">{competitiveShare.title}</h3>
+            <h3 className="text-emerald-500 font-semibold mb-3 text-lg">{competitiveShare.title}</h3>
 
-            <div className="bg-zinc-800/50 rounded-lg p-6">
+            <div className="bg-muted rounded-lg p-6">
               <div className="space-y-3">
                 {competitiveShare.data?.map((item, idx) => (
                   <div key={idx} className="flex justify-between">
                     <span>{item.company}</span>
                     <span
-                      className={`font-semibold ${idx === 0 ? "text-blue-400" : idx === 1 ? "text-green-400" : "text-zinc-400"}`}
+                      className={`font-semibold ${idx === 0 ? "text-blue-500" : idx === 1 ? "text-emerald-500" : "text-muted-foreground"}`}
                     >
                       {item.share}
                     </span>
@@ -109,7 +109,7 @@ export function IQVIADataDisplay({ data, isFirstPrompt }) {
               </div>
             </div>
 
-            <p className="mt-3 text-sm text-zinc-400">{competitiveShare.description}</p>
+            <p className="mt-3 text-sm text-muted-foreground">{competitiveShare.description}</p>
           </motion.div>
         )}
       </>
@@ -131,13 +131,13 @@ export function IQVIADataDisplay({ data, isFirstPrompt }) {
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.1 }}
         >
-          <h3 className="text-cyan-400 font-semibold mb-3 text-lg">{marketOverview.title}</h3>
+          <h3 className="text-teal-500 font-semibold mb-3 text-lg">{marketOverview.title}</h3>
 
-          <div className="bg-zinc-800/50 rounded-lg p-6 grid grid-cols-4 gap-4 text-sm">
+          <div className="bg-muted rounded-lg p-6 grid grid-cols-4 gap-4 text-sm">
             {marketOverview.metrics?.map((metric, idx) => (
-              <div key={idx} className="bg-zinc-900/60 border border-cyan-500/20 rounded-lg p-4">
-                <p className="text-zinc-400 text-xs">{metric.label}</p>
-                <p className="text-cyan-300 font-semibold mt-1">{metric.value}</p>
+              <div key={idx} className="bg-card border border-primary/20 rounded-lg p-4">
+                <p className="text-muted-foreground text-xs">{metric.label}</p>
+                <p className="text-teal-400 font-semibold mt-1">{metric.value}</p>
               </div>
             ))}
           </div>
@@ -151,11 +151,11 @@ export function IQVIADataDisplay({ data, isFirstPrompt }) {
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.3 }}
         >
-          <h3 className="text-purple-400 font-semibold mb-3 text-lg">{existingTherapies.title}</h3>
+          <h3 className="text-violet-500 font-semibold mb-3 text-lg">{existingTherapies.title}</h3>
 
-          <div className="bg-zinc-800/50 rounded-lg overflow-hidden">
+          <div className="bg-muted rounded-lg overflow-hidden">
             <table className="w-full text-sm">
-              <thead className="bg-zinc-800">
+              <thead className="bg-muted">
                 <tr>
                   <th className="text-left p-3">Drug</th>
                   <th className="text-center p-3">Mechanism</th>
@@ -165,7 +165,7 @@ export function IQVIADataDisplay({ data, isFirstPrompt }) {
               </thead>
               <tbody>
                 {existingTherapies.data?.map((therapy, idx) => (
-                  <tr key={idx} className="border-t border-zinc-700">
+                  <tr key={idx} className="border-t border-border">
                     <td className="p-3">{therapy.drug}</td>
                     <td className="text-center p-3">{therapy.mechanism}</td>
                     <td
@@ -191,12 +191,12 @@ export function IQVIADataDisplay({ data, isFirstPrompt }) {
         >
           <h3 className="text-emerald-400 font-semibold mb-3 text-lg">{audSignal.title}</h3>
 
-          <div className="bg-zinc-800/50 rounded-lg p-6 text-sm space-y-3">
-            <div className="bg-zinc-900/60 border border-emerald-500/20 rounded-lg p-4">
-              <p className="text-zinc-400 text-xs">Observed Effects</p>
+          <div className="bg-muted rounded-lg p-6 text-sm space-y-3">
+            <div className="bg-card border border-emerald-500/20 rounded-lg p-4">
+              <p className="text-muted-foreground text-xs">Observed Effects</p>
               <p className="text-emerald-300 font-semibold mt-1">{audSignal.observed_effects}</p>
             </div>
-            <ul className="list-disc list-inside text-zinc-400">
+            <ul className="list-disc list-inside text-muted-foreground">
               {audSignal.key_points?.map((point, idx) => (
                 <li key={idx}>{point}</li>
               ))}
@@ -212,13 +212,13 @@ export function IQVIADataDisplay({ data, isFirstPrompt }) {
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.7 }}
         >
-          <h3 className="text-amber-400 font-semibold mb-3 text-lg">{commercialScenario.title}</h3>
+          <h3 className="text-amber-500 font-semibold mb-3 text-lg">{commercialScenario.title}</h3>
 
-          <div className="bg-zinc-800/50 rounded-lg overflow-hidden">
+          <div className="bg-muted rounded-lg overflow-hidden">
             <table className="w-full text-sm">
               <tbody>
                 {commercialScenario.data?.map((item, idx) => (
-                  <tr key={idx} className="border-t border-zinc-700">
+                  <tr key={idx} className="border-t border-border">
                     <td className={`p-3 ${item.highlight ? "font-semibold" : ""}`}>
                       {item.metric}
                     </td>
@@ -259,26 +259,26 @@ export function EXIMDataDisplay({ data, showChart }) {
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.1 }}
         >
-          <h3 className="text-cyan-400 font-semibold mb-3 text-lg">{tradeVolume.title}</h3>
+          <h3 className="text-teal-500 font-semibold mb-3 text-lg">{tradeVolume.title}</h3>
 
-          <div className="bg-zinc-800/50 rounded-lg overflow-hidden">
+          <div className="bg-muted rounded-lg overflow-hidden">
             <table className="w-full text-sm">
-              <thead className="bg-zinc-800">
+              <thead className="bg-muted">
                 <tr>
-                  <th className="text-left p-3 text-zinc-300 font-semibold">Source Country</th>
-                  <th className="text-right p-3 text-zinc-300 font-semibold">Q2 2024 (kg)</th>
-                  <th className="text-right p-3 text-zinc-300 font-semibold">Q3 2024 (kg)</th>
-                  <th className="text-right p-3 text-zinc-300 font-semibold">QoQ Growth</th>
+                  <th className="text-left p-3 text-foreground font-semibold">Source Country</th>
+                  <th className="text-right p-3 text-foreground font-semibold">Q2 2024 (kg)</th>
+                  <th className="text-right p-3 text-foreground font-semibold">Q3 2024 (kg)</th>
+                  <th className="text-right p-3 text-foreground font-semibold">QoQ Growth</th>
                 </tr>
               </thead>
               <tbody>
                 {tradeVolume.data?.map((item, idx) => (
-                  <tr key={idx} className="border-t border-zinc-700">
+                  <tr key={idx} className="border-t border-border">
                     <td className="p-3 text-zinc-200 font-medium">{item.country}</td>
-                    <td className="text-right p-3 text-zinc-300">{item.q2_2024}</td>
-                    <td className="text-right p-3 text-zinc-300">{item.q3_2024}</td>
+                    <td className="text-right p-3 text-foreground">{item.q2_2024}</td>
+                    <td className="text-right p-3 text-foreground">{item.q3_2024}</td>
                     <td className="text-right p-3">
-                      <span className="text-green-400 font-semibold">{item.qoq_growth}</span>
+                      <span className="text-emerald-500 font-semibold">{item.qoq_growth}</span>
                     </td>
                   </tr>
                 ))}
@@ -286,7 +286,7 @@ export function EXIMDataDisplay({ data, showChart }) {
             </table>
           </div>
 
-          <p className="mt-3 text-sm text-zinc-400">{tradeVolume.description}</p>
+          <p className="mt-3 text-sm text-muted-foreground">{tradeVolume.description}</p>
         </motion.div>
       )}
 
@@ -297,12 +297,12 @@ export function EXIMDataDisplay({ data, showChart }) {
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.25 }}
         >
-          <h3 className="text-purple-400 font-semibold mb-3 text-lg">{priceTrend.title}</h3>
+          <h3 className="text-violet-500 font-semibold mb-3 text-lg">{priceTrend.title}</h3>
 
-          <div className="bg-zinc-800/50 rounded-lg p-6">
+          <div className="bg-muted rounded-lg p-6">
             <div className="space-y-4">
               <div className="flex items-end justify-between h-48">
-                <div className="flex flex-col justify-between h-full text-xs text-zinc-400 pr-2">
+                <div className="flex flex-col justify-between h-full text-xs text-muted-foreground pr-2">
                   <span>$6.0</span>
                   <span>$5.5</span>
                   <span>$5.0</span>
@@ -313,7 +313,7 @@ export function EXIMDataDisplay({ data, showChart }) {
                 <div className="flex-1 relative h-full">
                   <div className="absolute inset-0 flex flex-col justify-between">
                     {[...Array(5)].map((_, i) => (
-                      <div key={i} className="border-t border-zinc-700/50" />
+                      <div key={i} className="border-t border-border" />
                     ))}
                   </div>
 
@@ -357,18 +357,18 @@ export function EXIMDataDisplay({ data, showChart }) {
                 </div>
               </div>
 
-              <div className="flex justify-around text-xs text-zinc-400 pt-2 border-t border-zinc-700">
+              <div className="flex justify-around text-xs text-muted-foreground pt-2 border-t border-border">
                 {priceTrend.data?.map((item, idx) => (
                   <div key={idx} className="text-center">
-                    <div className="text-zinc-300 font-medium">{item.quarter}</div>
-                    <div className="text-purple-400 font-semibold">${item.price}</div>
+                    <div className="text-foreground font-medium">{item.quarter}</div>
+                    <div className="text-violet-500 font-semibold">${item.price}</div>
                   </div>
                 ))}
               </div>
             </div>
           </div>
 
-          <p className="mt-3 text-sm text-zinc-400">{priceTrend.description}</p>
+          <p className="mt-3 text-sm text-muted-foreground">{priceTrend.description}</p>
         </motion.div>
       )}
 
@@ -381,22 +381,22 @@ export function EXIMDataDisplay({ data, showChart }) {
         >
           <h3 className="text-orange-400 font-semibold mb-3 text-lg">{importDependency.title}</h3>
 
-          <div className="bg-zinc-800/50 rounded-lg overflow-hidden">
+          <div className="bg-muted rounded-lg overflow-hidden">
             <table className="w-full text-sm">
-              <thead className="bg-zinc-800">
+              <thead className="bg-muted">
                 <tr>
-                  <th className="text-left p-3 text-zinc-300 font-semibold">Region</th>
-                  <th className="text-center p-3 text-zinc-300 font-semibold">Dependency %</th>
-                  <th className="text-left p-3 text-zinc-300 font-semibold">Primary Sources</th>
-                  <th className="text-center p-3 text-zinc-300 font-semibold">Risk Level</th>
+                  <th className="text-left p-3 text-foreground font-semibold">Region</th>
+                  <th className="text-center p-3 text-foreground font-semibold">Dependency %</th>
+                  <th className="text-left p-3 text-foreground font-semibold">Primary Sources</th>
+                  <th className="text-center p-3 text-foreground font-semibold">Risk Level</th>
                 </tr>
               </thead>
               <tbody>
                 {importDependency.data?.map((item, idx) => (
-                  <tr key={idx} className="border-t border-zinc-700">
+                  <tr key={idx} className="border-t border-border">
                     <td className="p-3 text-zinc-200 font-medium">{item.region}</td>
-                    <td className="text-center p-3 text-zinc-300">{item.dependency_percent}</td>
-                    <td className="p-3 text-zinc-300">{item.primary_sources}</td>
+                    <td className="text-center p-3 text-foreground">{item.dependency_percent}</td>
+                    <td className="p-3 text-foreground">{item.primary_sources}</td>
                     <td className="text-center p-3">
                       <span
                         className={`px-2 py-1 rounded text-xs font-semibold ${
@@ -414,7 +414,7 @@ export function EXIMDataDisplay({ data, showChart }) {
             </table>
           </div>
 
-          <p className="mt-3 text-sm text-zinc-400">{importDependency.description}</p>
+          <p className="mt-3 text-sm text-muted-foreground">{importDependency.description}</p>
         </motion.div>
       )}
     </>
@@ -445,22 +445,22 @@ export function PatentDataDisplay({ data, isFirstPrompt }) {
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.1 }}
           >
-            <h3 className="text-amber-400 font-semibold mb-3 text-lg">{landscapeOverview.title}</h3>
+            <h3 className="text-amber-500 font-semibold mb-3 text-lg">{landscapeOverview.title}</h3>
 
-            <div className="bg-zinc-800/50 rounded-lg p-6 space-y-4">
+            <div className="bg-muted rounded-lg p-6 space-y-4">
               <div className="space-y-3">
                 {landscapeOverview.sections?.map((section, idx) => (
                   <div
                     key={idx}
-                    className="bg-zinc-900/60 border border-amber-500/20 rounded-lg p-4"
+                    className="bg-card border border-amber-500/20 rounded-lg p-4"
                   >
-                    <p className="text-zinc-400 text-sm">{section.label}</p>
+                    <p className="text-muted-foreground text-sm">{section.label}</p>
                     <p className="text-amber-300 font-semibold mt-1">{section.value}</p>
                   </div>
                 ))}
               </div>
 
-              <p className="text-sm text-zinc-400">{landscapeOverview.description}</p>
+              <p className="text-sm text-muted-foreground">{landscapeOverview.description}</p>
             </div>
           </motion.div>
         )}
@@ -472,16 +472,16 @@ export function PatentDataDisplay({ data, isFirstPrompt }) {
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.3 }}
           >
-            <h3 className="text-blue-400 font-semibold mb-3 text-lg">
+            <h3 className="text-blue-500 font-semibold mb-3 text-lg">
               {repurposingStrategy.title}
             </h3>
 
-            <div className="bg-zinc-800/50 rounded-lg p-6 space-y-3 text-sm">
-              <p className="text-zinc-400">
+            <div className="bg-muted rounded-lg p-6 space-y-3 text-sm">
+              <p className="text-muted-foreground">
                 <span className="text-white font-semibold">High-confidence targets:</span>{" "}
                 {repurposingStrategy.high_confidence_targets}
               </p>
-              <p className="text-zinc-400">
+              <p className="text-muted-foreground">
                 <span className="text-white font-semibold">Medium-risk exploratory areas:</span>{" "}
                 {repurposingStrategy.medium_risk_areas}
               </p>
@@ -498,7 +498,7 @@ export function PatentDataDisplay({ data, isFirstPrompt }) {
           >
             <h3 className="text-emerald-400 font-semibold mb-3 text-lg">{filingHeatmap.title}</h3>
 
-            <div className="bg-zinc-800/50 rounded-lg p-6">
+            <div className="bg-muted rounded-lg p-6">
               <div className="grid grid-cols-4 gap-3">
                 {filingHeatmap.data?.map((item, idx) => (
                   <div key={idx} className="text-center">
@@ -508,14 +508,14 @@ export function PatentDataDisplay({ data, isFirstPrompt }) {
                       <div className={`text-2xl font-bold text-${item.color}-400`}>
                         {item.count}
                       </div>
-                      <div className="text-xs text-zinc-400 mt-1">{item.region}</div>
+                      <div className="text-xs text-muted-foreground mt-1">{item.region}</div>
                     </div>
                   </div>
                 ))}
               </div>
             </div>
 
-            <p className="mt-3 text-sm text-zinc-400">{filingHeatmap.description}</p>
+            <p className="mt-3 text-sm text-muted-foreground">{filingHeatmap.description}</p>
           </motion.div>
         )}
 
@@ -528,16 +528,16 @@ export function PatentDataDisplay({ data, isFirstPrompt }) {
           >
             <h3 className="text-violet-400 font-semibold mb-3 text-lg">{keyPatentExtract.title}</h3>
 
-            <div className="bg-zinc-800/50 rounded-lg p-4 border-l-4 border-violet-500">
+            <div className="bg-muted rounded-lg p-4 border-l-4 border-violet-500">
               <div className="flex items-start gap-3">
                 <Shield className="text-violet-400 mt-1" size={20} />
                 <div>
                   <div className="text-xs text-violet-400 font-mono mb-2">
                     {keyPatentExtract.patent_number}
                   </div>
-                  <p className="text-sm text-zinc-300 italic">"{keyPatentExtract.description}"</p>
+                  <p className="text-sm text-foreground italic">"{keyPatentExtract.description}"</p>
                   <p className="text-xs text-zinc-500 mt-2">
-                    <span className="text-amber-400 font-semibold">⚠ Risk:</span>{" "}
+                    <span className="text-amber-500 font-semibold">⚠ Risk:</span>{" "}
                     {keyPatentExtract.risk_note}
                   </p>
                 </div>
@@ -555,14 +555,14 @@ export function PatentDataDisplay({ data, isFirstPrompt }) {
           >
             <h3 className="text-violet-500 font-semibold mb-3 text-lg">{ipOpportunities.title}</h3>
 
-            <div className="bg-zinc-800/50 rounded-lg p-6 space-y-3 text-sm">
-              <div className="bg-zinc-900/60 border border-violet-500/20 rounded-lg p-4">
-                <p className="text-zinc-400 text-xs">High-Value Claims</p>
+            <div className="bg-muted rounded-lg p-6 space-y-3 text-sm">
+              <div className="bg-card border border-violet-500/20 rounded-lg p-4">
+                <p className="text-muted-foreground text-xs">High-Value Claims</p>
                 <p className="text-violet-300 font-semibold mt-1">
                   {ipOpportunities.high_value_claims}
                 </p>
               </div>
-              <p className="text-zinc-400 text-xs">{ipOpportunities.note}</p>
+              <p className="text-muted-foreground text-xs">{ipOpportunities.note}</p>
             </div>
           </motion.div>
         )}
@@ -581,19 +581,19 @@ export function PatentDataDisplay({ data, isFirstPrompt }) {
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.1 }}
         >
-          <h3 className="text-amber-400 font-semibold mb-3 text-lg">{audFocus.title}</h3>
+          <h3 className="text-amber-500 font-semibold mb-3 text-lg">{audFocus.title}</h3>
 
-          <div className="bg-zinc-800/50 rounded-lg p-6 space-y-4">
+          <div className="bg-muted rounded-lg p-6 space-y-4">
             <div className="space-y-3">
               {audFocus.sections?.map((section, idx) => (
-                <div key={idx} className="bg-zinc-900/60 border border-amber-500/20 rounded-lg p-4">
-                  <p className="text-zinc-400 text-sm">{section.label}</p>
+                <div key={idx} className="bg-card border border-amber-500/20 rounded-lg p-4">
+                  <p className="text-muted-foreground text-sm">{section.label}</p>
                   <p className="text-amber-300 font-semibold mt-1">{section.value}</p>
                 </div>
               ))}
             </div>
 
-            <p className="text-sm text-zinc-400">{audFocus.description}</p>
+            <p className="text-sm text-muted-foreground">{audFocus.description}</p>
           </div>
         </motion.div>
       )}
@@ -623,8 +623,8 @@ export function ClinicalDataDisplay({ data, isFirstPrompt }) {
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.1 }}
           >
-            <h3 className="text-green-400 font-semibold mb-3 text-lg">{landscapeOverview.title}</h3>
-            <p className="text-sm text-zinc-400 mb-4">{landscapeOverview.description}</p>
+            <h3 className="text-emerald-500 font-semibold mb-3 text-lg">{landscapeOverview.title}</h3>
+            <p className="text-sm text-muted-foreground mb-4">{landscapeOverview.description}</p>
           </motion.div>
         )}
 
@@ -639,7 +639,7 @@ export function ClinicalDataDisplay({ data, isFirstPrompt }) {
               {phaseDistribution.title}
             </h3>
 
-            <div className="bg-zinc-800/50 rounded-lg p-6">
+            <div className="bg-muted rounded-lg p-6">
               <div className="flex items-center justify-center gap-8">
                 <div className="relative w-40 h-40">
                   <svg viewBox="0 0 200 200" className="transform -rotate-90">
@@ -687,7 +687,7 @@ export function ClinicalDataDisplay({ data, isFirstPrompt }) {
                   {phaseDistribution.data?.map((item, idx) => (
                     <div key={idx} className="flex items-center gap-2">
                       <div className={`w-4 h-4 rounded bg-${item.color}-500`}></div>
-                      <span className="text-zinc-300">{item.phase}</span>
+                      <span className="text-foreground">{item.phase}</span>
                       <span className={`text-${item.color}-400 font-semibold`}>
                         ~{item.count} trials
                       </span>
@@ -697,7 +697,7 @@ export function ClinicalDataDisplay({ data, isFirstPrompt }) {
               </div>
             </div>
 
-            <p className="mt-3 text-sm text-zinc-400">{phaseDistribution.description}</p>
+            <p className="mt-3 text-sm text-muted-foreground">{phaseDistribution.description}</p>
           </motion.div>
         )}
 
@@ -710,32 +710,32 @@ export function ClinicalDataDisplay({ data, isFirstPrompt }) {
           >
             <h3 className="text-teal-400 font-semibold mb-3 text-lg">{sponsorProfile.title}</h3>
 
-            <div className="bg-zinc-800/50 rounded-lg overflow-hidden">
+            <div className="bg-muted rounded-lg overflow-hidden">
               <table className="w-full text-sm">
-                <thead className="bg-zinc-800">
+                <thead className="bg-muted">
                   <tr>
-                    <th className="text-left p-3 text-zinc-300 font-semibold">Sponsor</th>
-                    <th className="text-center p-3 text-zinc-300 font-semibold">Trial Count</th>
-                    <th className="text-left p-3 text-zinc-300 font-semibold">Primary Focus</th>
+                    <th className="text-left p-3 text-foreground font-semibold">Sponsor</th>
+                    <th className="text-center p-3 text-foreground font-semibold">Trial Count</th>
+                    <th className="text-left p-3 text-foreground font-semibold">Primary Focus</th>
                   </tr>
                 </thead>
                 <tbody>
                   {sponsorProfile.data?.map((item, idx) => (
-                    <tr key={idx} className="border-t border-zinc-700">
+                    <tr key={idx} className="border-t border-border">
                       <td className="p-3 text-zinc-200 font-medium">{item.sponsor}</td>
                       <td
-                        className={`text-center p-3 font-semibold ${idx === 0 ? "text-blue-400" : idx === 1 ? "text-green-400" : "text-amber-400"}`}
+                        className={`text-center p-3 font-semibold ${idx === 0 ? "text-blue-500" : idx === 1 ? "text-emerald-500" : "text-amber-500"}`}
                       >
                         ~{item.trial_count}
                       </td>
-                      <td className="p-3 text-zinc-300">{item.focus}</td>
+                      <td className="p-3 text-foreground">{item.focus}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
 
-            <p className="mt-3 text-sm text-zinc-400">{sponsorProfile.description}</p>
+            <p className="mt-3 text-sm text-muted-foreground">{sponsorProfile.description}</p>
           </motion.div>
         )}
       </>
@@ -756,8 +756,8 @@ export function ClinicalDataDisplay({ data, isFirstPrompt }) {
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.1 }}
         >
-          <h3 className="text-green-400 font-semibold mb-3 text-lg">{audFocus.title}</h3>
-          <p className="text-sm text-zinc-400 mb-4">{audFocus.description}</p>
+          <h3 className="text-emerald-500 font-semibold mb-3 text-lg">{audFocus.title}</h3>
+          <p className="text-sm text-muted-foreground mb-4">{audFocus.description}</p>
         </motion.div>
       )}
 
@@ -769,30 +769,30 @@ export function ClinicalDataDisplay({ data, isFirstPrompt }) {
         >
           <h3 className="text-indigo-400 font-semibold mb-3 text-lg">{keyTrials.title}</h3>
 
-          <div className="bg-zinc-800/50 rounded-lg overflow-hidden">
+          <div className="bg-muted rounded-lg overflow-hidden">
             <table className="w-full text-sm">
-              <thead className="bg-zinc-800">
+              <thead className="bg-muted">
                 <tr>
-                  <th className="text-left p-3 text-zinc-300 font-semibold">Trial ID</th>
-                  <th className="text-center p-3 text-zinc-300 font-semibold">Phase</th>
-                  <th className="text-left p-3 text-zinc-300 font-semibold">Primary Endpoints</th>
-                  <th className="text-left p-3 text-zinc-300 font-semibold">Sponsor</th>
+                  <th className="text-left p-3 text-foreground font-semibold">Trial ID</th>
+                  <th className="text-center p-3 text-foreground font-semibold">Phase</th>
+                  <th className="text-left p-3 text-foreground font-semibold">Primary Endpoints</th>
+                  <th className="text-left p-3 text-foreground font-semibold">Sponsor</th>
                 </tr>
               </thead>
               <tbody>
                 {keyTrials.data?.map((trial, idx) => (
-                  <tr key={idx} className="border-t border-zinc-700">
+                  <tr key={idx} className="border-t border-border">
                     <td className="p-3 text-zinc-200 font-mono">{trial.trial_id}</td>
-                    <td className="text-center p-3 text-green-400 font-semibold">{trial.phase}</td>
-                    <td className="p-3 text-zinc-300">{trial.primary_endpoints}</td>
-                    <td className="p-3 text-zinc-300">{trial.sponsor}</td>
+                    <td className="text-center p-3 text-emerald-500 font-semibold">{trial.phase}</td>
+                    <td className="p-3 text-foreground">{trial.primary_endpoints}</td>
+                    <td className="p-3 text-foreground">{trial.sponsor}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
 
-          <p className="mt-3 text-sm text-zinc-400">{keyTrials.description}</p>
+          <p className="mt-3 text-sm text-muted-foreground">{keyTrials.description}</p>
         </motion.div>
       )}
 
@@ -806,15 +806,15 @@ export function ClinicalDataDisplay({ data, isFirstPrompt }) {
             {signalInterpretation.title}
           </h3>
 
-          <div className="bg-zinc-800/50 rounded-lg p-6 space-y-3 text-sm">
-            <div className="bg-zinc-900/60 border border-emerald-500/20 rounded-lg p-4">
-              <p className="text-zinc-400 text-xs">Observed Trends</p>
+          <div className="bg-muted rounded-lg p-6 space-y-3 text-sm">
+            <div className="bg-card border border-emerald-500/20 rounded-lg p-4">
+              <p className="text-muted-foreground text-xs">Observed Trends</p>
               <p className="text-emerald-300 font-semibold mt-1">
                 {signalInterpretation.observed_trends}
               </p>
             </div>
 
-            <p className="text-zinc-400">{signalInterpretation.description}</p>
+            <p className="text-muted-foreground">{signalInterpretation.description}</p>
           </div>
         </motion.div>
       )}
@@ -825,11 +825,11 @@ export function ClinicalDataDisplay({ data, isFirstPrompt }) {
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.7 }}
         >
-          <h3 className="text-amber-400 font-semibold mb-3 text-lg">{developmentGaps.title}</h3>
+          <h3 className="text-amber-500 font-semibold mb-3 text-lg">{developmentGaps.title}</h3>
 
-          <div className="bg-zinc-800/50 rounded-lg p-6 text-sm space-y-2">
+          <div className="bg-muted rounded-lg p-6 text-sm space-y-2">
             {developmentGaps.gaps?.map((gap, idx) => (
-              <p key={idx} className="text-zinc-400">
+              <p key={idx} className="text-muted-foreground">
                 • {gap}
               </p>
             ))}
@@ -860,17 +860,17 @@ export function InternalKnowledgeDataDisplay({ data, isFirstPrompt }) {
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.1 }}
           >
-            <h3 className="text-pink-400 font-semibold mb-3 text-lg">{strategicSynthesis.title}</h3>
+            <h3 className="text-pink-500 font-semibold mb-3 text-lg">{strategicSynthesis.title}</h3>
 
-            <div className="bg-zinc-800/50 rounded-lg p-6 text-sm space-y-4">
+            <div className="bg-muted rounded-lg p-6 text-sm space-y-4">
               {strategicSynthesis.insights?.map((insight, idx) => (
-                <div key={idx} className="bg-zinc-900/60 border border-pink-500/30 rounded-lg p-4">
-                  <p className="text-zinc-400 text-xs">{insight.label}</p>
+                <div key={idx} className="bg-card border border-pink-500/30 rounded-lg p-4">
+                  <p className="text-muted-foreground text-xs">{insight.label}</p>
                   <p className="text-pink-200 font-semibold mt-1">{insight.value}</p>
                 </div>
               ))}
 
-              <p className="text-zinc-400">{strategicSynthesis.description}</p>
+              <p className="text-muted-foreground">{strategicSynthesis.description}</p>
             </div>
           </motion.div>
         )}
@@ -885,28 +885,28 @@ export function InternalKnowledgeDataDisplay({ data, isFirstPrompt }) {
               {crossIndicationComparison.title}
             </h3>
 
-            <div className="bg-zinc-800/50 rounded-lg overflow-hidden">
+            <div className="bg-muted rounded-lg overflow-hidden">
               <table className="w-full text-sm">
-                <thead className="bg-zinc-800">
+                <thead className="bg-muted">
                   <tr>
-                    <th className="text-left p-3 text-zinc-300 font-semibold">Dimension</th>
-                    <th className="text-center p-3 text-zinc-300 font-semibold">
+                    <th className="text-left p-3 text-foreground font-semibold">Dimension</th>
+                    <th className="text-center p-3 text-foreground font-semibold">
                       Diabetes / Obesity
                     </th>
-                    <th className="text-center p-3 text-zinc-300 font-semibold">
+                    <th className="text-center p-3 text-foreground font-semibold">
                       Emerging CNS / Behavioral
                     </th>
                   </tr>
                 </thead>
                 <tbody>
                   {crossIndicationComparison.dimensions?.map((dim, idx) => (
-                    <tr key={idx} className="border-t border-zinc-700">
+                    <tr key={idx} className="border-t border-border">
                       <td className="p-3 text-zinc-200 font-medium">{dim.dimension}</td>
                       <td className="text-center p-3">
                         <span
                           className={`px-2 py-1 rounded text-xs font-semibold ${
                             dim.diabetes_obesity_level === "green"
-                              ? "bg-green-500/20 text-green-400"
+                              ? "bg-green-500/20 text-emerald-500"
                               : dim.diabetes_obesity_level === "red"
                                 ? "bg-red-500/20 text-red-400"
                                 : "bg-yellow-500/20 text-yellow-400"
@@ -919,7 +919,7 @@ export function InternalKnowledgeDataDisplay({ data, isFirstPrompt }) {
                         <span
                           className={`px-2 py-1 rounded text-xs font-semibold ${
                             dim.emerging_cns_level === "green"
-                              ? "bg-green-500/20 text-green-400"
+                              ? "bg-green-500/20 text-emerald-500"
                               : dim.emerging_cns_level === "red"
                                 ? "bg-red-500/20 text-red-400"
                                 : "bg-yellow-500/20 text-yellow-400"
@@ -934,7 +934,7 @@ export function InternalKnowledgeDataDisplay({ data, isFirstPrompt }) {
               </table>
             </div>
 
-            <p className="mt-3 text-sm text-zinc-400">{crossIndicationComparison.description}</p>
+            <p className="mt-3 text-sm text-muted-foreground">{crossIndicationComparison.description}</p>
           </motion.div>
         )}
       </>
@@ -953,17 +953,17 @@ export function InternalKnowledgeDataDisplay({ data, isFirstPrompt }) {
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.1 }}
         >
-          <h3 className="text-pink-400 font-semibold mb-3 text-lg">{audFocus.title}</h3>
+          <h3 className="text-pink-500 font-semibold mb-3 text-lg">{audFocus.title}</h3>
 
-          <div className="bg-zinc-800/50 rounded-lg p-6 text-sm space-y-4">
+          <div className="bg-muted rounded-lg p-6 text-sm space-y-4">
             {audFocus.insights?.map((insight, idx) => (
-              <div key={idx} className="bg-zinc-900/60 border border-pink-500/30 rounded-lg p-4">
-                <p className="text-zinc-400 text-xs">{insight.label}</p>
+              <div key={idx} className="bg-card border border-pink-500/30 rounded-lg p-4">
+                <p className="text-muted-foreground text-xs">{insight.label}</p>
                 <p className="text-pink-200 font-semibold mt-1">{insight.value}</p>
               </div>
             ))}
 
-            <p className="text-zinc-400">{audFocus.description}</p>
+            <p className="text-muted-foreground">{audFocus.description}</p>
           </div>
         </motion.div>
       )}
@@ -976,15 +976,15 @@ export function InternalKnowledgeDataDisplay({ data, isFirstPrompt }) {
         >
           <h3 className="text-fuchsia-400 font-semibold mb-3 text-lg">{riskFlags.title}</h3>
 
-          <div className="bg-zinc-800/50 rounded-lg p-6 text-sm space-y-2">
+          <div className="bg-muted rounded-lg p-6 text-sm space-y-2">
             {riskFlags.flags?.map((flag, idx) => (
-              <p key={idx} className="text-zinc-400">
+              <p key={idx} className="text-muted-foreground">
                 • {flag}
               </p>
             ))}
           </div>
 
-          <p className="mt-3 text-sm text-zinc-400">{riskFlags.description}</p>
+          <p className="mt-3 text-sm text-muted-foreground">{riskFlags.description}</p>
         </motion.div>
       )}
     </>
@@ -1006,7 +1006,7 @@ export function ReportGeneratorDataDisplay({ data, isFirstPrompt, onDownload }) 
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.1 }}
       >
-        <h3 className="text-purple-400 font-semibold mb-2 text-lg">{data.title}</h3>
+        <h3 className="text-violet-500 font-semibold mb-2 text-lg">{data.title}</h3>
         <p className="mb-3">{data.description}</p>
       </motion.div>
 
@@ -1028,7 +1028,7 @@ export function ReportGeneratorDataDisplay({ data, isFirstPrompt, onDownload }) 
               animate={{ opacity: 1, scale: 1 }}
               className="flex flex-col gap-3 mt-4"
             >
-              <div className="text-purple-400 text-sm">⏳ Finalizing report for download</div>
+              <div className="text-violet-500 text-sm">⏳ Finalizing report for download</div>
               <motion.button
                 whileHover={{ y: -1 }}
                 whileTap={{ scale: 0.98 }}
@@ -1076,10 +1076,11 @@ function FallbackDisplay({ agentName }) {
       transition={{ delay: 0.1 }}
       className="text-center py-8"
     >
-      <p className="text-zinc-400">No data available from {agentName} agent.</p>
+      <p className="text-muted-foreground">No data available from {agentName} agent.</p>
       <p className="text-zinc-500 text-sm mt-2">
         This may indicate the backend API is not responding.
       </p>
     </motion.div>
   );
 }
+

@@ -7,11 +7,11 @@ export const api = {
   /**
    * Run the full analysis pipeline
    * @param {string} prompt - User's analysis prompt
-   * @param {string} drugName - Drug name (default: semaglutide)
-   * @param {string} indication - Indication type (general/aud)
+   * @param {string} drugName - Drug name (optional - LLM will extract if not provided)
+   * @param {string} indication - Indication type (optional - LLM will extract if not provided)
    * @param {number} promptIndex - Prompt sequence number
    */
-  async runAnalysis(prompt, drugName = "semaglutide", indication = null, promptIndex = 1) {
+  async runAnalysis(prompt, drugName = null, indication = null, promptIndex = 1) {
     console.log("[API] runAnalysis called:", { prompt, drugName, indication, promptIndex });
     const response = await fetch(`${API_BASE_URL}/analyze`, {
       method: "POST",
@@ -38,8 +38,9 @@ export const api = {
 
   /**
    * Run analysis with streaming-style response
+   * LLM orchestrator will extract drug name and indication from the prompt
    */
-  async runAnalysisStream(prompt, drugName = "semaglutide", indication = null, promptIndex = 1) {
+  async runAnalysisStream(prompt, drugName = null, indication = null, promptIndex = 1) {
     console.log("[API] runAnalysisStream called:", { prompt, drugName, indication, promptIndex });
     const response = await fetch(`${API_BASE_URL}/analyze/stream`, {
       method: "POST",

@@ -289,10 +289,15 @@ def _keyword_based_validation(user_query: str) -> Dict[str, Any]:
         # Always add report generator
         agents_to_run.append("report_generator")
         
-        # Try to extract drug name from query
+        # Try to extract drug name from query (includes all mockData drugs)
         drug_name = None
-        known_drugs = ["semaglutide", "ozempic", "wegovy", "metformin", "aspirin", 
-                      "ibuprofen", "paracetamol", "acetaminophen", "atorvastatin"]
+        known_drugs = [
+            "semaglutide", "ozempic", "wegovy", "metformin", "sildenafil", "viagra",
+            "adalimumab", "humira", "fluoxetine", "prozac", "pembrolizumab", "keytruda",
+            "omeprazole", "prilosec", "rituximab", "rituxan", "ketamine", "pioglitazone",
+            "actos", "ivermectin", "aspirin", "ibuprofen", "paracetamol", "acetaminophen",
+            "atorvastatin", "lipitor"
+        ]
         for drug in known_drugs:
             if drug in query_lower:
                 drug_name = drug.capitalize()
@@ -349,50 +354,39 @@ def validate_and_plan_query(user_query: str) -> Dict[str, Any]:
                 "indication": "general"
             }
     
-    # If no LLM client available, use keyword-based fallback
-    if client is None:
-        print("[Orchestrator] Using keyword-based validation (no LLM available)")
-        return _keyword_based_validation(user_query)
-    
-    try:
-        print("[Orchestrator] Using LLM-based validation")
-        response = client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
-            messages=[
-                {"role": "system", "content": ORCHESTRATOR_SYSTEM_PROMPT},
-                {"role": "user", "content": user_query}
-            ],
-            temperature=0.1,
-            max_tokens=500
-        )
-        
-        result_text = response.choices[0].message.content.strip()
-        print(f"[Orchestrator] LLM response received: {result_text[:100]}...")
-        
-        # Try to extract JSON from the response
-        # Handle cases where LLM might add extra text
-        if "```json" in result_text:
-            result_text = result_text.split("```json")[1].split("```")[0].strip()
-        elif "```" in result_text:
-            result_text = result_text.split("```")[1].split("```")[0].strip()
-        
-        result = json.loads(result_text)
-        
-        # Validate the response structure
-        if not isinstance(result.get("is_valid"), bool):
-            raise ValueError("Invalid response structure")
-        
-        print(f"[Orchestrator] Validation result: is_valid={result.get('is_valid')}")
-        return result
-        
-    except json.JSONDecodeError as e:
-        print(f"[Orchestrator] JSON parse error: {e}")
-        print(f"[Orchestrator] Falling back to keyword validation")
-        return _keyword_based_validation(user_query)
-        
-    except Exception as e:
-        print(f"[Orchestrator] LLM error: {e}")
-        print(f"[Orchestrator] Falling back to keyword validation")
+    # Try LLM-based validation if Groq client is available
+    if client:
+        try:
+            print("[Orchestrator] Using Groq LLM for query validation...")
+            response = client.chat.completions.create(
+                model="llama-3.3-70b-versatile",
+                messages=[
+                    {"role": "system", "content": ORCHESTRATOR_SYSTEM_PROMPT},
+                    {"role": "user", "content": user_query}
+                ],
+                temperature=0.1,
+                max_tokens=500
+            )
+            
+            result_text = response.choices[0].message.content.strip()
+            print(f"[Orchestrator] LLM response: {result_text[:200]}...")
+            
+            # Parse JSON from response
+            try:
+                result = json.loads(result_text)
+                print(f"[Orchestrator] Parsed result: {result}")
+                return result
+            except json.JSONDecodeError as e:
+                print(f"[Orchestrator] JSON parse error: {e}")
+                print(f"[Orchestrator] Falling back to keyword-based validation")
+                return _keyword_based_validation(user_query)
+                
+        except Exception as e:
+            print(f"[Orchestrator] LLM call failed: {e}")
+            print("[Orchestrator] Falling back to keyword-based validation")
+            return _keyword_based_validation(user_query)
+    else:
+        print("[Orchestrator] No Groq client, using keyword-based validation")
         return _keyword_based_validation(user_query)
 
 
@@ -408,12 +402,18 @@ def run_agent_with_llm(agent_id: str, user_query: str, drug_name: str = None, in
     In production, this would call actual APIs/databases.
     For now, it returns data from JSON files with LLM enhancement.
     """
-    from api import load_agent_data, AGENT_NAMES
-    
+    def load_agent_data(agent_id, indication, drug_name):
+        from api import load_agent_data
+        return load_agent_data(agent_id, indication, drug_name)
+
+    def get_agent_name(agent_id):
+        from api import AGENT_NAMES
+        return AGENT_NAMES.get(agent_id, agent_id)
+
     # Load the mock data
     data = load_agent_data(agent_id, indication, drug_name or "semaglutide")
-    
-    agent_name = AGENT_NAMES.get(agent_id, agent_id)
+    agent_name = get_agent_name(agent_id)
+
     
     return {
         "agent_id": agent_id,
