@@ -21,6 +21,12 @@ def fetch_clinical_trials(
     try:
         client = ClinicalTrialsGovClient()
 
+        # Normalize "null" string inputs to None
+        if isinstance(condition, str) and condition.lower() == "null":
+            condition = None
+        if isinstance(phase, str) and phase.lower() == "null":
+            phase = None
+
         # Search trials with provided filters
         result = client.search_trials(
             drug_name=drug_name,

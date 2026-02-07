@@ -3,9 +3,9 @@
 from typing import Optional
 import uuid
 from datetime import datetime
-
 from fastapi import Request
 from pymongo import MongoClient
+from bson import ObjectId
 
 from app.core.config import MONGO_URI, MONGO_DB_NAME, MONGO_CHAT_COLLECTION
 
@@ -27,6 +27,28 @@ class DatabaseManager:
         except Exception as e:  # pragma: no cover - connectivity errors surface early
             print(f"[DB] MongoDB connection failed: {e}")
             raise
+    
+    def get_session(self, session_id: str):
+        doc = self.sessions.find_one({"sessionId": session_id})
+        return self._serialize(doc)
+
+    def list_sessions(self):
+        docs = list(self.sessions.find({}))
+        return self._serialize(docs)
+
+    def _serialize(self, obj):
+        if isinstance(obj, ObjectId):
+            return str(obj)
+        if isinstance(obj, datetime):
+            return obj.isoformat()
+        if isinstance(obj, uuid.UUID):
+            return str(obj)
+        if isinstance(obj, list):
+            return [self._serialize(i) for i in obj]
+        if isinstance(obj, dict):
+            return {k: self._serialize(v) for k, v in obj.items()}
+        return obj
+
 
     def create_session(self, title: str = "New Analysis") -> str:
         """Create a session with a unique UUID and return sessionId."""
@@ -70,23 +92,6 @@ class DatabaseManager:
 
         print(f"[DB] Session {session_id} not found for deletion")
         return False
-
-    def append_agents_data(
-        self, session_id: str, prompt_id: str, prompt: str, agents_results: dict
-    ) -> None:
-        """Append agent results for a specific prompt to the session."""
-        now = datetime.utcnow().isoformat()
-        agent_entry = {
-            "promptId": prompt_id,
-            "prompt": prompt,
-            "timestamp": now,
-            "agents": agents_results,
-        }
-        self.sessions.update_one(
-            {"sessionId": session_id},
-            {"$push": {"agentsData": agent_entry}},
-        )
-
 
 def init_db() -> DatabaseManager:
     """Create a database manager instance."""

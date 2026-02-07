@@ -1,9 +1,12 @@
 from __future__ import annotations
 
-from crewai import Agent, LLM
-from .tools.fetch_clinical_trials import fetch_clinical_trials
-from .tools.analyze_trial_phases import analyze_trial_phases
 import json
+
+from crewai import Agent, LLM
+
+from app.services.viz_builder import build_clinical_visualizations
+from .tools.analyze_trial_phases import analyze_trial_phases
+from .tools.fetch_clinical_trials import fetch_clinical_trials
 
 llm = LLM(model="groq/llama-3.3-70b-versatile", max_tokens=400)
 
@@ -140,12 +143,26 @@ def run_clinical_agent(
     if hasattr(clinical_agent, "run"):
         try:
             result = clinical_agent.run(user_prompt)
+            # If crew returns string, try JSON parse then enrich
             if isinstance(result, str):
                 try:
                     parsed = json.loads(result)
-                    return {"status": "success", "data": parsed}
+                    return {
+                        "status": "success",
+                        "data": parsed,
+                        "visualizations": build_clinical_visualizations(
+                            parsed if isinstance(parsed, dict) else {}
+                        ),
+                    }
                 except json.JSONDecodeError:
                     return {"status": "success", "data": result}
+            # If crew returns dict-like, enrich with viz
+            if isinstance(result, dict):
+                return {
+                    "status": "success",
+                    "data": result,
+                    "visualizations": build_clinical_visualizations(result),
+                }
             return {"status": "success", "data": result}
         except AttributeError:
             # fall through to direct tools
@@ -161,18 +178,22 @@ def run_clinical_agent(
         if "error" in trials:
             return {"status": "error", "message": trials.get("error")}
         analysis = analyze_fn(trials)
+
+        payload = {
+            "input": {
+                "drug_name": drug,
+                "condition": cond,
+                "phase": ph,
+                "status": stat,
+            },
+            "trials": trials,
+            "analysis": analysis,
+        }
+
         return {
             "status": "success",
-            "data": {
-                "input": {
-                    "drug_name": drug,
-                    "condition": cond,
-                    "phase": ph,
-                    "status": stat,
-                },
-                "trials": trials,
-                "analysis": analysis,
-            },
+            "data": payload,
+            "visualizations": build_clinical_visualizations(payload),
         }
     except Exception as e:  # pragma: no cover - defensive
         return {"status": "error", "message": str(e)}

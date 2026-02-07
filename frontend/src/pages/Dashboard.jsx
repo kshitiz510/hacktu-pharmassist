@@ -22,6 +22,8 @@ import {
   X,
   AlertCircle,
   Download,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { ChatSidebar } from "@/components/ChatSidebar";
@@ -34,6 +36,7 @@ import {
   InternalKnowledgeDataDisplay,
   ReportGeneratorDataDisplay,
 } from "@/components/AgentDataDisplays";
+import { VizList } from "@/components/visualizations";
 
 const AGENT_ID_MAP = {
   iqvia: 0,
@@ -163,6 +166,7 @@ export default function GeminiDashboard() {
   const [isPinned, setIsPinned] = useState(false);
   const [selectedAgent, setSelectedAgent] = useState(null);
   const [showAgentFlowLocal, setShowAgentFlowLocal] = useState(false);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
 
   // Map chats to have 'id' property for ChatSidebar compatibility
   // Filter out any chats without sessionId to prevent errors
@@ -175,13 +179,47 @@ export default function GeminiDashboard() {
       updatedAt: chat.updatedAt || chat.createdAt || new Date().toISOString(),
     }));
 
+  // Normalize latest prompt's agent data (agentsData is now an array of prompt entries)
+  const latestAgentsEntry = Array.isArray(activeChat?.agentsData)
+    ? activeChat.agentsData[activeChat.agentsData.length - 1]
+    : null;
+
+  // Normalize agent keys so both "CLINICAL_AGENT" and "clinical" map consistently
+  const normalizeAgentKeys = (agentsObj = {}) => {
+    const out = {};
+    Object.entries(agentsObj).forEach(([key, value]) => {
+      // Normalize key to lowercase, remove _AGENT suffix
+      let normalizedKey = key.toLowerCase();
+      if (normalizedKey.endsWith("_agent")) {
+        normalizedKey = normalizedKey.replace(/_agent$/, "");
+      }
+      // Handle report generator naming
+      if (normalizedKey === "report_generator") {
+        normalizedKey = "report";
+      }
+      // Store with normalized key
+      if (!out[normalizedKey]) {
+        out[normalizedKey] = value;
+      }
+    });
+    return out;
+  };
+
+  const rawAgentData = latestAgentsEntry?.agents || activeChat?.agentsData || {};
+  const agentData = normalizeAgentKeys(rawAgentData);
+
   // Debug logging
   useEffect(() => {
     console.log("[Dashboard] Raw chats from useChatManager:", chats);
     console.log("[Dashboard] Mapped chats for ChatSidebar:", mappedChats);
     console.log("[Dashboard] Active chat ID:", activeChatId);
     console.log("[Dashboard] Active chat:", activeChat);
-  }, [chats, mappedChats, activeChatId, activeChat]);
+    if (activeChat?.agentsData) {
+      console.log("[Dashboard] agentsData array:", activeChat.agentsData);
+      console.log("[Dashboard] Latest agents entry:", latestAgentsEntry);
+      console.log("[Dashboard] Normalized agent data:", agentData);
+    }
+  }, [chats, mappedChats, activeChatId, activeChat, latestAgentsEntry, agentData]);
 
   const workflowState = activeChat?.workflowState || {
     activeAgent: null,
@@ -193,8 +231,6 @@ export default function GeminiDashboard() {
     panelCollapsed: false,
     showAgentFlow: false,
   };
-
-  const agentData = activeChat?.agentsData || {};
   const chatHistory = activeChat?.chatHistory || [];
 
   useEffect(() => {
@@ -275,6 +311,13 @@ export default function GeminiDashboard() {
   const currentAgentIndex = selectedAgentIndex ?? activeAgentIndex;
 
   const hasAgentData = Object.keys(agentData).length > 0;
+  console.log(
+    "[Dashboard] hasAgentData:",
+    hasAgentData,
+    "| agentData keys:",
+    Object.keys(agentData),
+  );
+
   const shouldShowAgentFlow =
     !activeChat ||
     chatHistory.length === 0 ||
@@ -284,10 +327,37 @@ export default function GeminiDashboard() {
 
   const renderAgentDataDisplay = (agentIndex) => {
     const agent = AGENTS[agentIndex];
-    if (!agent) return null;
-    const data = agentData[agent.key];
-    if (!data) return null;
+    if (!agent) {
+      console.warn("[renderAgentDataDisplay] No agent found for index:", agentIndex);
+      return null;
+    }
 
+    const agentResponse = agentData[agent.key];
+    console.log(
+      `[renderAgentDataDisplay] Agent ${agent.key} (index ${agentIndex}):`,
+      agentResponse,
+    );
+
+    if (!agentResponse) {
+      console.warn(`[renderAgentDataDisplay] No data for agent ${agent.key}`);
+      return null;
+    }
+
+    // Extract visualizations - can be at top level or nested in data
+    const visualizations = agentResponse.visualizations || agentResponse.data?.visualizations || [];
+
+    console.log(`[renderAgentDataDisplay] ${agent.key} visualizations:`, visualizations);
+
+    // If agent provides visualizations in standardized format, render them generically
+    if (Array.isArray(visualizations) && visualizations.length > 0) {
+      return <VizList visualizations={visualizations} agentName={agent.name} />;
+    }
+
+    // Extract actual data (could be nested)
+    const data = agentResponse.data || agentResponse;
+    console.log(`[renderAgentDataDisplay] ${agent.key} fallback data:`, data);
+
+    // Fallback to legacy per-agent renderers
     switch (agent.key) {
       case "iqvia":
         return <IQVIADataDisplay data={data} isFirstPrompt={true} />;
@@ -321,6 +391,10 @@ export default function GeminiDashboard() {
         onNewChat={handleNewChat}
         onSelectChat={handleSelectChat}
         onDeleteChat={handleDeleteChat}
+        onRestoreChat={() => {}}
+        onRenameChat={() => {}}
+        isCollapsed={isSidebarCollapsed}
+        onToggleCollapse={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
       />
 
       {/* Main Area */}
@@ -558,10 +632,10 @@ export default function GeminiDashboard() {
                           animate={{ opacity: 1, x: 0 }}
                           exit={{ opacity: 0, x: 100 }}
                           transition={{ duration: 0.7 }}
-                          className="flex-1 h-full pb-2"
+                          className="flex-1 h-full pb-2 min-w-0 max-w-[60%]"
                         >
-                          <Card className="bg-card border-border h-full">
-                            <CardContent className="p-6 pb-8 h-full flex flex-col">
+                          <Card className="bg-card border-border h-full overflow-hidden">
+                            <CardContent className="p-6 pb-8 h-full flex flex-col min-w-0 overflow-hidden">
                               <div className="flex items-center justify-between gap-3 mb-6 pb-4 border-b border-border">
                                 <div className="flex items-center gap-3">
                                   {currentAgentIndex === 0 && (
@@ -593,28 +667,41 @@ export default function GeminiDashboard() {
                                 </div>
                               </div>
 
-                              <ScrollArea className="flex-1 overflow-auto pr-2">
-                                {currentAgentIndex !== null &&
-                                !agentData[AGENTS[currentAgentIndex]?.key] ? (
-                                  <div className="flex flex-col items-center justify-center h-full gap-4">
-                                    <Loader2 className="animate-spin text-primary" size={48} />
-                                    <p className="text-muted-foreground text-lg">
-                                      {currentAgentIndex === 0 && "Fetching market data..."}
-                                      {currentAgentIndex === 1 &&
-                                        "Analyzing export-import trends..."}
-                                      {currentAgentIndex === 2 && "Querying patent databases..."}
-                                      {currentAgentIndex === 3 && "Searching trial databases..."}
-                                      {currentAgentIndex === 4 &&
-                                        "Searching internal knowledge base..."}
-                                      {currentAgentIndex === 5 && "Aggregating agent outputs..."}
-                                    </p>
-                                  </div>
-                                ) : (
-                                  <div className="space-y-6 text-foreground leading-relaxed w-full min-w-0">
-                                    {currentAgentIndex !== null &&
-                                      renderAgentDataDisplay(currentAgentIndex)}
-                                  </div>
-                                )}
+                              <ScrollArea className="flex-1 overflow-auto pr-2 min-w-0">
+                                {(() => {
+                                  const currentAgent = AGENTS[currentAgentIndex];
+                                  const hasCurrentAgentData =
+                                    currentAgent && agentData[currentAgent.key];
+                                  console.log(
+                                    "[Agent Panel] Current agent:",
+                                    currentAgent?.key,
+                                    "| Has data:",
+                                    !!hasCurrentAgentData,
+                                    "| Data:",
+                                    hasCurrentAgentData,
+                                  );
+
+                                  return currentAgentIndex !== null && !hasCurrentAgentData ? (
+                                    <div className="flex flex-col items-center justify-center h-full gap-4">
+                                      <Loader2 className="animate-spin text-primary" size={48} />
+                                      <p className="text-muted-foreground text-lg">
+                                        {currentAgentIndex === 0 && "Fetching market data..."}
+                                        {currentAgentIndex === 1 &&
+                                          "Analyzing export-import trends..."}
+                                        {currentAgentIndex === 2 && "Querying patent databases..."}
+                                        {currentAgentIndex === 3 && "Searching trial databases..."}
+                                        {currentAgentIndex === 4 &&
+                                          "Searching internal knowledge base..."}
+                                        {currentAgentIndex === 5 && "Aggregating agent outputs..."}
+                                      </p>
+                                    </div>
+                                  ) : (
+                                    <div className="space-y-6 text-foreground leading-relaxed w-full min-w-0">
+                                      {currentAgentIndex !== null &&
+                                        renderAgentDataDisplay(currentAgentIndex)}
+                                    </div>
+                                  );
+                                })()}
                               </ScrollArea>
                             </CardContent>
                           </Card>
