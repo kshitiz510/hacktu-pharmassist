@@ -1,10 +1,10 @@
 import { useState, useEffect, useCallback, useRef } from "react";
+import { api } from "../services/api";
 
-const STORAGE_KEY = "pharma_chat_history";
-const MAX_CHATS = 50; // Maximum number of chats to store
+const MAX_CHATS = 50; // Maximum number of chats to load
 
 /**
- * Custom hook for managing chat sessions with persistence
+ * Custom hook for managing chat sessions with MongoDB persistence
  * Provides ChatGPT-like functionality for multiple conversations
  */
 export function useChatManager() {
@@ -12,60 +12,90 @@ export function useChatManager() {
   const [chats, setChats] = useState([]);
   const [activeChatId, setActiveChatId] = useState(null);
   const [isLoaded, setIsLoaded] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
   const saveTimeoutRef = useRef(null);
 
-  // Load chats from localStorage on mount
+  // Load chats from MongoDB on mount
   useEffect(() => {
+    loadChatsFromDB();
+  }, []);
+
+  const loadChatsFromDB = async () => {
     try {
-      const saved = localStorage.getItem(STORAGE_KEY);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          setChats(parsed);
-          // Don't auto-select last chat - start fresh
-        }
+      setIsLoading(true);
+      const response = await api.listSessions(MAX_CHATS, 0);
+
+      if (response.status === "success" && response.sessions) {
+        // Convert MongoDB sessions to frontend format
+        const loadedChats = response.sessions.map((session) => ({
+          id: session.sessionId,
+          title: session.title || "New Analysis",
+          createdAt: session.createdAt,
+          updatedAt: session.updatedAt,
+          messages: [], // Will load when session is selected
+          agentData: {},
+          workflowState: {
+            activeAgent: null,
+            showAgentDataByAgent: {},
+            reportReady: false,
+            workflowComplete: false,
+            queryRejected: false,
+            systemResponse: null,
+            panelCollapsed: false,
+            showAgentFlow: false,
+            drugName: null,
+            indication: null,
+          },
+        }));
+        setChats(loadedChats);
       }
     } catch (error) {
-      console.error("[ChatManager] Error loading chats:", error);
+      console.error("[ChatManager] Error loading chats from DB:", error);
+      // Fallback: start with empty state
+      setChats([]);
+    } finally {
+      setIsLoading(false);
+      setIsLoaded(true);
     }
-    setIsLoaded(true);
-  }, []);
+  };
 
-  // Debounced save to localStorage
-  const saveToStorage = useCallback((chatsToSave) => {
-    if (saveTimeoutRef.current) {
-      clearTimeout(saveTimeoutRef.current);
-    }
-    saveTimeoutRef.current = setTimeout(() => {
-      try {
-        // Only save essential data to prevent storage bloat
-        const minimalChats = chatsToSave.slice(-MAX_CHATS).map((chat) => ({
-          id: chat.id,
-          title: chat.title,
-          createdAt: chat.createdAt,
-          updatedAt: chat.updatedAt,
-          messages: chat.messages,
-          agentData: chat.agentData,
-          workflowState: chat.workflowState,
-        }));
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(minimalChats));
-      } catch (error) {
-        console.error("[ChatManager] Error saving chats:", error);
-        // If storage is full, remove oldest chats
-        if (error.name === "QuotaExceededError") {
-          const reducedChats = chatsToSave.slice(-10);
-          localStorage.setItem(STORAGE_KEY, JSON.stringify(reducedChats));
-        }
+  // Load full session data when selected
+  const loadFullSession = async (sessionId) => {
+    try {
+      const response = await api.getSession(sessionId);
+
+      if (response.status === "success" && response.session) {
+        const session = response.session;
+
+        // Update the chat in state with full data
+        setChats((prev) =>
+          prev.map((chat) =>
+            chat.id === sessionId
+              ? {
+                  ...chat,
+                  messages: session.chatHistory || [],
+                  agentData: session.agentsData || {},
+                  workflowState: {
+                    activeAgent: session.workflowState?.activeAgent || null,
+                    showAgentDataByAgent: session.workflowState?.showAgentDataByAgent || {},
+                    reportReady: session.workflowState?.reportReady || false,
+                    workflowComplete: session.workflowState?.workflowComplete || false,
+                    queryRejected: session.workflowState?.queryRejected || false,
+                    systemResponse: session.workflowState?.systemResponse || null,
+                    panelCollapsed: session.workflowState?.panelCollapsed || false,
+                    showAgentFlow: session.workflowState?.showAgentFlow || false,
+                    drugName: session.workflowState?.drugName || null,
+                    indication: session.workflowState?.indication || null,
+                  },
+                }
+              : chat,
+          ),
+        );
       }
-    }, 500);
-  }, []);
-
-  // Save whenever chats change
-  useEffect(() => {
-    if (isLoaded && chats.length > 0) {
-      saveToStorage(chats);
+    } catch (error) {
+      console.error("[ChatManager] Error loading full session:", error);
     }
-  }, [chats, isLoaded, saveToStorage]);
+  };
 
   // Get the active chat object
   const activeChat = chats.find((c) => c.id === activeChatId) || null;
@@ -78,81 +108,160 @@ export function useChatManager() {
   };
 
   // Create a new chat
-  const createChat = useCallback(() => {
-    const newChat = {
-      id: Date.now(),
-      title: "New Analysis",
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-      messages: [], // Array of { role: 'user'|'system', content, timestamp, type? }
-      agentData: {}, // { 0: {...}, 1: {...}, ... } - data from each agent
-      workflowState: {
-        activeAgent: null,
-        showAgentDataByAgent: {},
-        reportReady: false,
-        workflowComplete: false,
-        queryRejected: false,
-        systemResponse: null,
-        panelCollapsed: false,
-        showAgentFlow: false, // Only true during actual analysis workflow
-        drugName: null, // Extracted drug name from LLM
-        indication: null, // Extracted indication from LLM
-      },
-    };
-    setChats((prev) => [...prev, newChat]);
-    setActiveChatId(newChat.id);
-    return newChat;
+  const createChat = useCallback(async () => {
+    try {
+      const response = await api.createSession("New Analysis");
+
+      if (response.status === "success" && response.session) {
+        const newChat = {
+          id: response.session.sessionId,
+          title: response.session.title,
+          createdAt: response.session.createdAt,
+          updatedAt: response.session.updatedAt,
+          messages: [],
+          agentData: {},
+          workflowState: {
+            activeAgent: null,
+            showAgentDataByAgent: {},
+            reportReady: false,
+            workflowComplete: false,
+            queryRejected: false,
+            systemResponse: null,
+            panelCollapsed: false,
+            showAgentFlow: false,
+            drugName: null,
+            indication: null,
+          },
+        };
+
+        setChats((prev) => [newChat, ...prev]);
+        setActiveChatId(newChat.id);
+        return newChat;
+      }
+    } catch (error) {
+      console.error("[ChatManager] Error creating chat:", error);
+      // Fallback: create local-only chat
+      const fallbackChat = {
+        id: `local_${Date.now()}`,
+        title: "New Analysis",
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        messages: [],
+        agentData: {},
+        workflowState: {
+          activeAgent: null,
+          showAgentDataByAgent: {},
+          reportReady: false,
+          workflowComplete: false,
+          queryRejected: false,
+          systemResponse: null,
+          panelCollapsed: false,
+          showAgentFlow: false,
+          drugName: null,
+          indication: null,
+        },
+      };
+      setChats((prev) => [fallbackChat, ...prev]);
+      setActiveChatId(fallbackChat.id);
+      return fallbackChat;
+    }
   }, []);
 
   // Select an existing chat
-  const selectChat = useCallback((chatId) => {
-    setActiveChatId(chatId);
-  }, []);
+  const selectChat = useCallback(
+    async (chatId) => {
+      setActiveChatId(chatId);
+
+      // Load full session data if not already loaded
+      const chat = chats.find((c) => c.id === chatId);
+      if (chat && chat.messages.length === 0) {
+        await loadFullSession(chatId);
+      }
+    },
+    [chats],
+  );
 
   // Delete a chat
   const deleteChat = useCallback(
-    (chatId) => {
-      setChats((prev) => {
-        const filtered = prev.filter((c) => c.id !== chatId);
-        // If we deleted the active chat, clear selection
+    async (chatId) => {
+      try {
+        // Delete from MongoDB
+        await api.deleteSession(chatId);
+
+        // Remove from local state
+        setChats((prev) => {
+          const filtered = prev.filter((c) => c.id !== chatId);
+          if (chatId === activeChatId) {
+            setActiveChatId(null);
+          }
+          return filtered;
+        });
+      } catch (error) {
+        console.error("[ChatManager] Error deleting chat:", error);
+        // Still remove from local state on error
+        setChats((prev) => prev.filter((c) => c.id !== chatId));
         if (chatId === activeChatId) {
           setActiveChatId(null);
         }
-        // Update storage immediately for deletion
-        if (filtered.length === 0) {
-          localStorage.removeItem(STORAGE_KEY);
-        }
-        return filtered;
-      });
+      }
     },
     [activeChatId],
   );
 
   // Rename a chat
-  const renameChat = useCallback((chatId, newTitle) => {
-    setChats((prev) =>
-      prev.map((chat) =>
-        chat.id === chatId
-          ? { ...chat, title: newTitle.trim() || "Untitled", updatedAt: new Date().toISOString() }
-          : chat,
-      ),
-    );
+  const renameChat = useCallback(async (chatId, newTitle) => {
+    try {
+      // Update in MongoDB
+      await api.updateSessionTitle(chatId, newTitle.trim() || "Untitled");
+
+      // Update local state
+      setChats((prev) =>
+        prev.map((chat) =>
+          chat.id === chatId
+            ? { ...chat, title: newTitle.trim() || "Untitled", updatedAt: new Date().toISOString() }
+            : chat,
+        ),
+      );
+    } catch (error) {
+      console.error("[ChatManager] Error renaming chat:", error);
+      // Update local state anyway
+      setChats((prev) =>
+        prev.map((chat) =>
+          chat.id === chatId ? { ...chat, title: newTitle.trim() || "Untitled" } : chat,
+        ),
+      );
+    }
   }, []);
 
   // Add a message to a chat (uses activeChatId if targetChatId not provided)
   const addMessage = useCallback(
-    (role, content, type = "text", targetChatId = null) => {
+    async (role, content, type = "text", targetChatId = null) => {
       const chatId = targetChatId || activeChatId;
       if (!chatId) return null;
 
       const message = {
-        id: Date.now(),
+        id: `msg_${Date.now()}`,
         role, // 'user' | 'assistant' | 'system'
         content,
         type, // 'text' | 'greeting' | 'rejection' | 'agent-complete'
         timestamp: new Date().toISOString(),
       };
 
+      try {
+        // Add to MongoDB
+        const response = await api.addMessage(chatId, role, content, type);
+
+        if (response.status === "success" && response.messageData) {
+          // Use the message data from server
+          message.id = response.messageData.id;
+          message.timestamp = response.messageData.timestamp;
+        }
+      } catch (error) {
+        console.error("[ChatManager] Error adding message to DB:", error);
+        // Continue with local update even if DB fails
+      }
+
+      // Update local state
       setChats((prev) =>
         prev.map((chat) => {
           if (chat.id !== chatId) return chat;
@@ -161,6 +270,11 @@ export function useChatManager() {
           // Auto-update title from first user message
           const newTitle =
             chat.messages.length === 0 && role === "user" ? generateTitle(content) : chat.title;
+
+          // Update title in DB if it changed
+          if (newTitle !== chat.title) {
+            api.updateSessionTitle(chatId, newTitle).catch(console.error);
+          }
 
           return {
             ...chat,
@@ -178,10 +292,18 @@ export function useChatManager() {
 
   // Update agent data for a chat (uses activeChatId if targetChatId not provided)
   const updateAgentData = useCallback(
-    (agentId, data, targetChatId = null) => {
+    async (agentId, data, targetChatId = null) => {
       const chatId = targetChatId || activeChatId;
       if (!chatId) return;
 
+      try {
+        // Update in MongoDB
+        await api.updateAgentData(chatId, agentId, data);
+      } catch (error) {
+        console.error("[ChatManager] Error updating agent data in DB:", error);
+      }
+
+      // Update local state
       setChats((prev) =>
         prev.map((chat) =>
           chat.id === chatId
@@ -199,7 +321,7 @@ export function useChatManager() {
 
   // Update workflow state for a chat (uses activeChatId if targetChatId not provided)
   const updateWorkflowState = useCallback(
-    (updatesOrFn, targetChatId = null) => {
+    async (updatesOrFn, targetChatId = null) => {
       const chatId = targetChatId || activeChatId;
       if (!chatId) return;
 
@@ -211,9 +333,14 @@ export function useChatManager() {
           const updates =
             typeof updatesOrFn === "function" ? updatesOrFn(chat.workflowState) : updatesOrFn;
 
+          const newWorkflowState = { ...chat.workflowState, ...updates };
+
+          // Update in MongoDB (async, don't wait)
+          api.updateWorkflowState(chatId, newWorkflowState).catch(console.error);
+
           return {
             ...chat,
-            workflowState: { ...chat.workflowState, ...updates },
+            workflowState: newWorkflowState,
             updatedAt: new Date().toISOString(),
           };
         }),
@@ -224,26 +351,36 @@ export function useChatManager() {
 
   // Reset workflow state (for new analysis in same chat or new chat)
   const resetWorkflowState = useCallback(
-    (chatId = activeChatId) => {
+    async (chatId = activeChatId) => {
       if (!chatId) return;
 
+      const resetState = {
+        activeAgent: null,
+        showAgentDataByAgent: {},
+        reportReady: false,
+        workflowComplete: false,
+        queryRejected: false,
+        systemResponse: null,
+        panelCollapsed: false,
+        showAgentFlow: false,
+        drugName: null,
+        indication: null,
+      };
+
+      try {
+        // Update in MongoDB
+        await api.updateWorkflowState(chatId, resetState);
+      } catch (error) {
+        console.error("[ChatManager] Error resetting workflow state in DB:", error);
+      }
+
+      // Update local state
       setChats((prev) =>
         prev.map((chat) =>
           chat.id === chatId
             ? {
                 ...chat,
-                workflowState: {
-                  activeAgent: null,
-                  showAgentDataByAgent: {},
-                  reportReady: false,
-                  workflowComplete: false,
-                  queryRejected: false,
-                  systemResponse: null,
-                  panelCollapsed: false,
-                  showAgentFlow: false,
-                  drugName: null,
-                  indication: null,
-                },
+                workflowState: resetState,
                 agentData: {},
               }
             : chat,
@@ -254,21 +391,58 @@ export function useChatManager() {
   );
 
   // Clear all chats
-  const clearAllChats = useCallback(() => {
+  const clearAllChats = useCallback(async () => {
+    try {
+      // Delete all sessions from MongoDB
+      const deletionPromises = chats.map((chat) => api.deleteSession(chat.id));
+      await Promise.allSettled(deletionPromises);
+    } catch (error) {
+      console.error("[ChatManager] Error clearing all chats from DB:", error);
+    }
+
+    // Clear local state
     setChats([]);
     setActiveChatId(null);
-    localStorage.removeItem(STORAGE_KEY);
-  }, []);
+  }, [chats]);
 
-  // Restore a deleted chat
-  const restoreChat = useCallback((chat) => {
-    setChats((prev) => {
-      // Add chat back, sorted by updatedAt
-      const restored = [...prev, chat].sort(
-        (a, b) => new Date(b.updatedAt) - new Date(a.updatedAt),
-      );
-      return restored;
-    });
+  // Restore a deleted chat (re-create in MongoDB)
+  const restoreChat = useCallback(async (chat) => {
+    try {
+      // Create new session in MongoDB with old data
+      const response = await api.createSession(chat.title);
+
+      if (response.status === "success" && response.session) {
+        const restoredChat = {
+          ...chat,
+          id: response.session.sessionId,
+          createdAt: response.session.createdAt,
+          updatedAt: response.session.updatedAt,
+        };
+
+        // Restore messages
+        for (const msg of chat.messages) {
+          await api.addMessage(restoredChat.id, msg.role, msg.content, msg.type);
+        }
+
+        // Restore agent data
+        for (const [agentId, data] of Object.entries(chat.agentData)) {
+          await api.updateAgentData(restoredChat.id, agentId, data);
+        }
+
+        // Restore workflow state
+        await api.updateWorkflowState(restoredChat.id, chat.workflowState);
+
+        // Add to local state
+        setChats((prev) => {
+          const restored = [restoredChat, ...prev].sort(
+            (a, b) => new Date(b.updatedAt) - new Date(a.updatedAt),
+          );
+          return restored;
+        });
+      }
+    } catch (error) {
+      console.error("[ChatManager] Error restoring chat:", error);
+    }
   }, []);
 
   // Get message count for a chat
@@ -286,6 +460,7 @@ export function useChatManager() {
     activeChatId,
     activeChat,
     isLoaded,
+    isLoading,
 
     // Actions
     createChat,
@@ -299,6 +474,7 @@ export function useChatManager() {
     resetWorkflowState,
     clearAllChats,
     getMessageCount,
+    loadFullSession,
 
     // Direct state setter for bulk updates
     setActiveChatId,

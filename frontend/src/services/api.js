@@ -199,6 +199,225 @@ export const api = {
 
     console.log("[API] PDF download initiated");
   },
+
+  // ===== SESSION MANAGEMENT =====
+
+  /**
+   * Create a new chat session
+   * @param {string} title - Optional title for the session
+   * @returns {Promise<Object>} Session data with sessionId
+   */
+  async createSession(title = "New Analysis") {
+    console.log("[API] createSession called:", { title });
+    const response = await fetch(`${API_BASE_URL}/sessions/create`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ title }),
+    });
+
+    if (!response.ok) {
+      console.error("[API] createSession failed:", response.statusText);
+      throw new Error(`Failed to create session: ${response.statusText}`);
+    }
+
+    const data = await response.json();
+    console.log("[API] createSession response:", data);
+    return data;
+  },
+
+  /**
+   * List all chat sessions
+   * @param {number} limit - Maximum number of sessions to return
+   * @param {number} skip - Number of sessions to skip (for pagination)
+   * @returns {Promise<Object>} Array of sessions
+   */
+  async listSessions(limit = 50, skip = 0) {
+    console.log("[API] listSessions called:", { limit, skip });
+    const params = new URLSearchParams({ limit, skip });
+    const response = await fetch(`${API_BASE_URL}/sessions?${params}`);
+
+    if (!response.ok) {
+      console.error("[API] listSessions failed:", response.statusText);
+      throw new Error(`Failed to list sessions: ${response.statusText}`);
+    }
+
+    const data = await response.json();
+    console.log("[API] listSessions response:", data);
+    return data;
+  },
+
+  /**
+   * Get a specific session by ID
+   * @param {string} sessionId - Session ID
+   * @returns {Promise<Object>} Complete session data
+   */
+  async getSession(sessionId) {
+    console.log("[API] getSession called:", { sessionId });
+    const response = await fetch(`${API_BASE_URL}/sessions/${sessionId}`);
+
+    if (!response.ok) {
+      console.error("[API] getSession failed:", response.statusText);
+      throw new Error(`Failed to get session: ${response.statusText}`);
+    }
+
+    const data = await response.json();
+    console.log("[API] getSession response:", data);
+    return data;
+  },
+
+  /**
+   * Update session data
+   * @param {string} sessionId - Session ID
+   * @param {Object} updates - Data to update (title, agentsData, workflowState)
+   * @returns {Promise<Object>} Update status
+   */
+  async updateSession(sessionId, updates) {
+    console.log("[API] updateSession called:", { sessionId, updates });
+    const response = await fetch(`${API_BASE_URL}/sessions/${sessionId}/update`, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(updates),
+    });
+
+    if (!response.ok) {
+      console.error("[API] updateSession failed:", response.statusText);
+      throw new Error(`Failed to update session: ${response.statusText}`);
+    }
+
+    const data = await response.json();
+    console.log("[API] updateSession response:", data);
+    return data;
+  },
+
+  /**
+   * Delete a session
+   * @param {string} sessionId - Session ID
+   * @returns {Promise<Object>} Deletion status
+   */
+  async deleteSession(sessionId) {
+    console.log("[API] deleteSession called:", { sessionId });
+    const response = await fetch(`${API_BASE_URL}/sessions/${sessionId}/delete`, {
+      method: "DELETE",
+    });
+
+    if (!response.ok) {
+      console.error("[API] deleteSession failed:", response.statusText);
+      throw new Error(`Failed to delete session: ${response.statusText}`);
+    }
+
+    const data = await response.json();
+    console.log("[API] deleteSession response:", data);
+    return data;
+  },
+
+  /**
+   * Add a message to a session
+   * @param {string} sessionId - Session ID
+   * @param {string} role - Message role ('user' | 'assistant' | 'system')
+   * @param {string} content - Message content
+   * @param {string} type - Message type (default: 'text')
+   * @returns {Promise<Object>} Message data
+   */
+  async addMessage(sessionId, role, content, type = "text") {
+    console.log("[API] addMessage called:", { sessionId, role, content, type });
+    const response = await fetch(`${API_BASE_URL}/sessions/${sessionId}/message`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ role, content, type }),
+    });
+
+    if (!response.ok) {
+      console.error("[API] addMessage failed:", response.statusText);
+      throw new Error(`Failed to add message: ${response.statusText}`);
+    }
+
+    const data = await response.json();
+    console.log("[API] addMessage response:", data);
+    return data;
+  },
+
+  /**
+   * Update agent data for a session
+   * @param {string} sessionId - Session ID
+   * @param {string} agentId - Agent identifier
+   * @param {Object} data - Agent data
+   * @returns {Promise<Object>} Update status
+   */
+  async updateAgentData(sessionId, agentId, data) {
+    console.log("[API] updateAgentData called:", { sessionId, agentId });
+    const params = new URLSearchParams({ agent_id: agentId });
+    const response = await fetch(`${API_BASE_URL}/sessions/${sessionId}/agent-data?${params}`, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(data),
+    });
+
+    if (!response.ok) {
+      console.error("[API] updateAgentData failed:", response.statusText);
+      throw new Error(`Failed to update agent data: ${response.statusText}`);
+    }
+
+    const result = await response.json();
+    console.log("[API] updateAgentData response:", result);
+    return result;
+  },
+
+  /**
+   * Update workflow state for a session
+   * @param {string} sessionId - Session ID
+   * @param {Object} workflowState - Workflow state data
+   * @returns {Promise<Object>} Update status
+   */
+  async updateWorkflowState(sessionId, workflowState) {
+    console.log("[API] updateWorkflowState called:", { sessionId, workflowState });
+    const response = await fetch(`${API_BASE_URL}/sessions/${sessionId}/workflow-state`, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(workflowState),
+    });
+
+    if (!response.ok) {
+      console.error("[API] updateWorkflowState failed:", response.statusText);
+      throw new Error(`Failed to update workflow state: ${response.statusText}`);
+    }
+
+    const data = await response.json();
+    console.log("[API] updateWorkflowState response:", data);
+    return data;
+  },
+
+  /**
+   * Update session title
+   * @param {string} sessionId - Session ID
+   * @param {string} title - New title
+   * @returns {Promise<Object>} Update status
+   */
+  async updateSessionTitle(sessionId, title) {
+    console.log("[API] updateSessionTitle called:", { sessionId, title });
+    const params = new URLSearchParams({ title });
+    const response = await fetch(`${API_BASE_URL}/sessions/${sessionId}/title?${params}`, {
+      method: "PUT",
+    });
+
+    if (!response.ok) {
+      console.error("[API] updateSessionTitle failed:", response.statusText);
+      throw new Error(`Failed to update title: ${response.statusText}`);
+    }
+
+    const data = await response.json();
+    console.log("[API] updateSessionTitle response:", data);
+    return data;
+  },
 };
 
 // Agent ID to frontend index mapping

@@ -10,6 +10,20 @@ from dotenv import load_dotenv
 # Load environment variables
 load_dotenv()
 
+# Import MongoDB manager and models
+try:
+    from db_manager import get_db_manager, close_db_connection
+    from models import (
+        ChatSession, Message, SessionCreate, SessionUpdate, 
+        MessageCreate, SessionResponse, SessionListItem
+    )
+    HAS_DB_MANAGER = True
+except ImportError as e:
+    print(f"[API] Database manager not available: {e}")
+    HAS_DB_MANAGER = False
+    get_db_manager = None
+    close_db_connection = None
+
 # Import LLM orchestrator for query validation (optional for PDF generation)
 try:
     from llm_orchestrator import validate_and_plan_query, synthesize_results
@@ -189,9 +203,259 @@ async def root():
             "/analyze": "POST - Run full analysis pipeline",
             "/agents": "GET - List available agents",
             "/agent/{agent_id}": "POST - Run specific agent",
-            "/data/{agent_id}": "GET - Get raw data for agent"
+            "/data/{agent_id}": "GET - Get raw data for agent",
+            "/sessions": "GET - List all chat sessions",
+            "/sessions/create": "POST - Create new chat session",
+            "/sessions/{session_id}": "GET - Get session by ID",
+            "/sessions/{session_id}/update": "PUT - Update session data",
+            "/sessions/{session_id}/delete": "DELETE - Delete session",
+            "/sessions/{session_id}/message": "POST - Add message to session"
         }
     }
+
+
+# ===== SESSION MANAGEMENT ENDPOINTS =====
+
+@app.post("/sessions/create")
+async def create_session(request: Optional[SessionCreate] = None):
+    """Create a new chat session"""
+    if not HAS_DB_MANAGER:
+        raise HTTPException(status_code=503, detail="Database not available")
+    
+    try:
+        db = get_db_manager()
+        title = request.title if request else "New Analysis"
+        session = db.create_session(title=title)
+        
+        return {
+            "status": "success",
+            "message": "Session created successfully",
+            "session": {
+                "sessionId": session.sessionId,
+                "title": session.title,
+                "createdAt": session.createdAt.isoformat(),
+                "updatedAt": session.updatedAt.isoformat(),
+                "messageCount": session.messageCount
+            }
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to create session: {str(e)}")
+
+
+@app.get("/sessions")
+async def list_sessions(limit: int = 50, skip: int = 0):
+    """List all chat sessions with pagination"""
+    if not HAS_DB_MANAGER:
+        raise HTTPException(status_code=503, detail="Database not available")
+    
+    try:
+        db = get_db_manager()
+        sessions = db.list_sessions(limit=limit, skip=skip)
+        
+        return {
+            "status": "success",
+            "count": len(sessions),
+            "sessions": sessions
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to list sessions: {str(e)}")
+
+
+@app.get("/sessions/{session_id}")
+async def get_session(session_id: str):
+    """Get a specific session by ID"""
+    if not HAS_DB_MANAGER:
+        raise HTTPException(status_code=503, detail="Database not available")
+    
+    try:
+        db = get_db_manager()
+        session = db.get_session(session_id)
+        
+        if not session:
+            raise HTTPException(status_code=404, detail="Session not found")
+        
+        return {
+            "status": "success",
+            "session": {
+                "sessionId": session.sessionId,
+                "title": session.title,
+                "createdAt": session.createdAt.isoformat(),
+                "updatedAt": session.updatedAt.isoformat(),
+                "messageCount": session.messageCount,
+                "agentsData": session.agentsData,
+                "chatHistory": [
+                    {
+                        "id": msg.id,
+                        "role": msg.role,
+                        "content": msg.content,
+                        "type": msg.type,
+                        "timestamp": msg.timestamp.isoformat()
+                    }
+                    for msg in session.chatHistory
+                ],
+                "workflowState": session.workflowState.model_dump()
+            }
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get session: {str(e)}")
+
+
+@app.put("/sessions/{session_id}/update")
+async def update_session(session_id: str, updates: Dict[str, Any]):
+    """Update session data (title, agentsData, workflowState)"""
+    if not HAS_DB_MANAGER:
+        raise HTTPException(status_code=503, detail="Database not available")
+    
+    try:
+        db = get_db_manager()
+        success = db.update_session(session_id, updates)
+        
+        if not success:
+            raise HTTPException(status_code=404, detail="Session not found or no changes made")
+        
+        return {
+            "status": "success",
+            "message": "Session updated successfully"
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to update session: {str(e)}")
+
+
+@app.delete("/sessions/{session_id}/delete")
+async def delete_session(session_id: str):
+    """Delete a chat session"""
+    if not HAS_DB_MANAGER:
+        raise HTTPException(status_code=503, detail="Database not available")
+    
+    try:
+        db = get_db_manager()
+        success = db.delete_session(session_id)
+        
+        if not success:
+            raise HTTPException(status_code=404, detail="Session not found")
+        
+        return {
+            "status": "success",
+            "message": "Session deleted successfully"
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to delete session: {str(e)}")
+
+
+@app.post("/sessions/{session_id}/message")
+async def add_message_to_session(session_id: str, message: MessageCreate):
+    """Add a message to a session's chat history"""
+    if not HAS_DB_MANAGER:
+        raise HTTPException(status_code=503, detail="Database not available")
+    
+    try:
+        db = get_db_manager()
+        
+        # Create message object
+        msg = Message(
+            role=message.role,
+            content=message.content,
+            type=message.type
+        )
+        
+        success = db.add_message(session_id, msg)
+        
+        if not success:
+            raise HTTPException(status_code=404, detail="Session not found")
+        
+        return {
+            "status": "success",
+            "message": "Message added successfully",
+            "messageData": {
+                "id": msg.id,
+                "role": msg.role,
+                "content": msg.content,
+                "type": msg.type,
+                "timestamp": msg.timestamp.isoformat()
+            }
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to add message: {str(e)}")
+
+
+@app.put("/sessions/{session_id}/agent-data")
+async def update_session_agent_data(session_id: str, agent_id: str, data: Dict[str, Any]):
+    """Update agent data for a specific session"""
+    if not HAS_DB_MANAGER:
+        raise HTTPException(status_code=503, detail="Database not available")
+    
+    try:
+        db = get_db_manager()
+        success = db.update_agent_data(session_id, agent_id, data)
+        
+        if not success:
+            raise HTTPException(status_code=404, detail="Session not found")
+        
+        return {
+            "status": "success",
+            "message": f"Agent data for {agent_id} updated successfully"
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to update agent data: {str(e)}")
+
+
+@app.put("/sessions/{session_id}/workflow-state")
+async def update_session_workflow_state(session_id: str, workflow_state: Dict[str, Any]):
+    """Update workflow state for a specific session"""
+    if not HAS_DB_MANAGER:
+        raise HTTPException(status_code=503, detail="Database not available")
+    
+    try:
+        db = get_db_manager()
+        success = db.update_workflow_state(session_id, workflow_state)
+        
+        if not success:
+            raise HTTPException(status_code=404, detail="Session not found")
+        
+        return {
+            "status": "success",
+            "message": "Workflow state updated successfully"
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to update workflow state: {str(e)}")
+
+
+@app.put("/sessions/{session_id}/title")
+async def update_session_title(session_id: str, title: str):
+    """Update session title"""
+    if not HAS_DB_MANAGER:
+        raise HTTPException(status_code=503, detail="Database not available")
+    
+    try:
+        db = get_db_manager()
+        success = db.update_title(session_id, title)
+        
+        if not success:
+            raise HTTPException(status_code=404, detail="Session not found")
+        
+        return {
+            "status": "success",
+            "message": "Title updated successfully"
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to update title: {str(e)}")
+
+
+# ===== END SESSION MANAGEMENT ENDPOINTS =====
 
 
 @app.get("/agents")
@@ -557,4 +821,9 @@ async def download_pdf(filename: str):
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("api:app", host="0.0.0.0", port=8000, reload=True)
+    try:
+        uvicorn.run("api:app", host="0.0.0.0", port=8000, reload=True)
+    finally:
+        # Close database connection on shutdown
+        if HAS_DB_MANAGER and close_db_connection:
+            close_db_connection()
