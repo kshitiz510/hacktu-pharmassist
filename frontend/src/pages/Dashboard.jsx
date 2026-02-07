@@ -28,6 +28,7 @@ import {
 import { motion, AnimatePresence } from "framer-motion";
 import { ChatSidebar } from "@/components/ChatSidebar";
 import { useChatManager } from "@/hooks/useChatManager";
+import { LandingPage } from "@/components/LandingPage";
 import {
   IQVIADataDisplay,
   EXIMDataDisplay,
@@ -726,111 +727,12 @@ export default function GeminiDashboard() {
                 </motion.div>
               ) : !sessionId ? (
                 /* Initialization Screen */
-                <motion.div
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                  className="flex-1 flex items-center justify-center"
-                >
-                  <div className="text-center max-w-2xl px-4">
-                    <motion.div
-                      initial={{ scale: 0.95, opacity: 0 }}
-                      animate={{ scale: 1, opacity: 1 }}
-                      transition={{ delay: 0.2, type: "spring", stiffness: 100 }}
-                      className="mb-8"
-                    >
-                      <div className="w-20 h-20 mx-auto rounded-2xl bg-gradient-to-br from-primary to-blue-600 flex items-center justify-center mb-6 shadow-lg shadow-primary/40">
-                        <Sparkles className="text-white" size={40} />
-                      </div>
-                      <h1 className="text-4xl font-bold text-foreground mb-3">
-                        Welcome to PharmAssist
-                      </h1>
-                      <p className="text-lg text-muted-foreground mb-8">
-                        Multi-agent pharmaceutical intelligence system for drug repurposing analysis
-                      </p>
-                    </motion.div>
-
-                    {apiError && (
-                      <motion.div
-                        initial={{ opacity: 0, y: -10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        className="mb-6 p-4 rounded-xl bg-destructive/10 border border-destructive/30 flex items-center gap-3"
-                      >
-                        <AlertCircle className="text-destructive flex-shrink-0" size={20} />
-                        <p className="text-sm text-destructive text-left">{apiError}</p>
-                      </motion.div>
-                    )}
-
-                    <motion.button
-                      initial={{ opacity: 0, y: 20 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: 0.4 }}
-                      whileHover={{ scale: 1.05 }}
-                      whileTap={{ scale: 0.95 }}
-                      onClick={handleNewChat}
-                      className="inline-flex items-center justify-center gap-3 px-8 py-4 rounded-xl font-semibold text-lg text-primary-foreground bg-gradient-to-r from-primary to-blue-600 hover:from-primary/90 hover:to-blue-600/90 shadow-lg shadow-primary/30 transition-all mb-12"
-                    >
-                      <Plus size={20} />
-                      Start New Analysis
-                    </motion.button>
-
-                    {/* Features Grid */}
-                    <motion.div
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      transition={{ delay: 0.6 }}
-                      className="grid grid-cols-1 md:grid-cols-3 gap-4 text-left"
-                    >
-                      {[
-                        {
-                          icon: TrendingUp,
-                          title: "Market Analysis",
-                          desc: "IQVIA insights, sales trends & competitive data",
-                        },
-                        {
-                          icon: Scale,
-                          title: "Patent Strategy",
-                          desc: "FTO analysis, patent expiry & IP landscape",
-                        },
-                        {
-                          icon: Microscope,
-                          title: "Clinical Trials",
-                          desc: "Trial pipeline, MoA mapping & phase analysis",
-                        },
-                        {
-                          icon: Globe,
-                          title: "Trade Analysis",
-                          desc: "Export-import trends, API pricing & tariffs",
-                        },
-                        {
-                          icon: Database,
-                          title: "Internal Knowledge",
-                          desc: "Strategic insights & document intelligence",
-                        },
-                        {
-                          icon: FileBarChart,
-                          title: "Report Generation",
-                          desc: "Executive summaries & PDF exports",
-                        },
-                      ].map((feature, idx) => {
-                        const Icon = feature.icon;
-                        return (
-                          <motion.div
-                            key={idx}
-                            initial={{ opacity: 0, y: 20 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            transition={{ delay: 0.7 + idx * 0.1 }}
-                            className="p-4 rounded-xl bg-card border border-border hover:border-primary/50 transition-colors"
-                          >
-                            <Icon className="text-primary mb-3" size={24} />
-                            <h3 className="font-semibold text-foreground mb-1">{feature.title}</h3>
-                            <p className="text-xs text-muted-foreground">{feature.desc}</p>
-                          </motion.div>
-                        );
-                      })}
-                    </motion.div>
-                  </div>
-                </motion.div>
+                <LandingPage
+                  onStartNewChat={handleNewChat}
+                  showFullGrid={true}
+                  apiError={apiError}
+                  isLoading={isLoading}
+                />
               ) : (
                 /* Chat Interface View */
                 <motion.div
@@ -843,62 +745,12 @@ export default function GeminiDashboard() {
                   <ScrollArea className="flex-1">
                     <div className="space-y-4 py-4 max-w-4xl mx-auto px-6">
                       {!activeChat || chatHistory.length === 0 ? (
-                        <div className="flex flex-col items-center justify-center h-full text-center px-8 py-8">
-                          <motion.div
-                            initial={{ scale: 0.9, opacity: 0 }}
-                            animate={{ scale: 1, opacity: 1 }}
-                            transition={{ duration: 0.5 }}
-                            className="mb-8"
-                          >
-                            <div className="w-20 h-20 bg-gradient-to-br from-primary to-blue-600 rounded-2xl flex items-center justify-center mb-6 mx-auto shadow-xl shadow-primary/20">
-                              <Network className="text-white" size={40} />
-                            </div>
-                            <h1 className="text-3xl font-bold text-foreground mb-3">
-                              Welcome to PharmAssist
-                            </h1>
-                            <p className="text-muted-foreground max-w-lg">
-                              Your AI-powered pharmaceutical intelligence assistant. I can analyze
-                              drug repurposing opportunities, clinical trials, patents, and market
-                              data.
-                            </p>
-                          </motion.div>
-                          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 w-full max-w-2xl">
-                            {[
-                              {
-                                icon: TrendingUp,
-                                text: "Market Analysis",
-                                color: "blue",
-                              },
-                              {
-                                icon: Activity,
-                                text: "Clinical Trials",
-                                color: "green",
-                              },
-                              {
-                                icon: Shield,
-                                text: "Patent Landscape",
-                                color: "amber",
-                              },
-                            ].map((item, idx) => (
-                              <motion.div
-                                key={idx}
-                                initial={{ opacity: 0, y: 20 }}
-                                animate={{ opacity: 1, y: 0 }}
-                                transition={{ delay: 0.2 + idx * 0.1 }}
-                                className="p-4 rounded-xl bg-card border border-border hover:border-primary/50 transition-all cursor-pointer group"
-                                onClick={() => {
-                                  setPrompt(`Analyze ${item.text.toLowerCase()} for Semaglutide`);
-                                }}
-                              >
-                                <item.icon
-                                  className="text-primary mb-2 group-hover:scale-110 transition-transform"
-                                  size={24}
-                                />
-                                <p className="text-sm text-foreground">{item.text}</p>
-                              </motion.div>
-                            ))}
-                          </div>
-                        </div>
+                        <LandingPage
+                          onSelectFeature={(title) => {
+                            setPrompt(`Analyze ${title.toLowerCase()} for Semaglutide`);
+                          }}
+                          showFullGrid={false}
+                        />
                       ) : (
                         chatHistory.map((msg, idx) => (
                           <motion.div
