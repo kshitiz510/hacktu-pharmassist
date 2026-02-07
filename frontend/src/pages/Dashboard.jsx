@@ -466,7 +466,7 @@ export default function GeminiDashboard() {
           )}
 
           {/* Content Area */}
-          <div className={`flex-1 overflow-auto ${shouldShowAgentFlow ? "p-6" : ""}`}>
+          <div className={`flex-1 overflow-auto ${shouldShowAgentFlow ? "py-2 px-6" : ""}`}>
             <AnimatePresence mode="wait">
               {shouldShowAgentFlow ? (
                 /* Agent Flow Visualization */
@@ -485,7 +485,7 @@ export default function GeminiDashboard() {
                     }}
                   >
                     {/* Orchestrator Box */}
-                    <div className="flex justify-center pt-24  mb-10 relative z-10">
+                    <div className="flex justify-center pt-4  mb-10 relative z-10">
                       <motion.div
                         initial={{ opacity: 0, y: -20, scale: 0.95 }}
                         animate={{ opacity: 1, y: 0, scale: 1 }}

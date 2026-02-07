@@ -48,6 +48,7 @@ def load_agent_data(agent_key: str) -> Dict[str, Any]:
             return data[first_key]
     return data
 
+
 def plan_and_run_session(
     db: DatabaseManager,
     session: Dict[str, Any],
@@ -55,18 +56,16 @@ def plan_and_run_session(
     agents: List[str],
     prompt_id: str,
 ) -> str:
+    """
+    Orchestrate based on full session state.
+    For now: only return a frontend-compatible temporary response.
+    """
 
     print("\n[ORCHESTRATOR] Session received")
     print(f"Session ID: {session['sessionId']}")
     print("Agents to run:", agents)
 
-    # Fetch last agent state for context (if exists)
-    previous_agents_data = {}
-    if session.get("agentsData"):
-        last_entry = session["agentsData"][-1]
-        previous_agents_data = last_entry.get("agents", {})
-
-    agents_results = previous_agents_data.copy()
+    agents_results = {}
 
     for agent_key in agents:
         db.sessions.update_one(
@@ -79,37 +78,42 @@ def plan_and_run_session(
             },
         )
 
+        # Normalize agent key for comparison (handle both "clinical" and "CLINICAL_AGENT")
         normalized_key = agent_key.lower().replace("_agent", "")
-        print(f"[ORCHESTRATOR] Running agent: {agent_key} (normalized: {normalized_key})")
+
+        print(
+            f"[ORCHESTRATOR] Running agent: {agent_key} (normalized: {normalized_key})"
+        )
 
         if normalized_key == "clinical":
+            print(f"[ORCHESTRATOR] Calling run_clinical_agent with: {user_query}")
             data = run_clinical_agent(user_query)
+            print(f"[ORCHESTRATOR] Clinical agent returned: {data}")
         elif normalized_key == "iqvia":
+            print(f"[ORCHESTRATOR] Calling run_iqvia_agent with: {user_query}")
             data = run_iqvia_agent(user_query)
+            print(f"[ORCHESTRATOR] IQVIA agent returned: {data}")
         elif normalized_key == "exim":
+            print(f"[ORCHESTRATOR] Calling run_exim_agent with: {user_query}")
             data = run_exim_agent(user_query)
+            print(f"[ORCHESTRATOR] EXIM agent returned: {data}")
         elif normalized_key == "patent":
+            print(f"[ORCHESTRATOR] Calling run_patent_agent with: {user_query}")
             data = run_patent_agent(user_query)
+            print(f"[ORCHESTRATOR] Patent agent returned: {data}")
         else:
             data = load_agent_data(agent_key)
 
-        # Append instead of overwrite
-        if agent_key not in agents_results:
-            agents_results[agent_key] = []
+        agents_results[agent_key] = data
 
-        agents_results[agent_key].append({
-            "timestamp": datetime.datetime.utcnow().isoformat(),
-            "query": user_query,
-            "result": data
-        })
-
+    now = datetime.datetime.utcnow().isoformat()
     agent_entry = {
         "promptId": prompt_id,
         "prompt": user_query,
-        "timestamp": datetime.datetime.utcnow().isoformat(),
+        "timestamp": now,
         "agents": agents_results,
     }
-
+    print(agents_results)
     db.sessions.update_one(
         {"sessionId": session["sessionId"]},
         {
@@ -122,4 +126,7 @@ def plan_and_run_session(
         },
     )
 
-    return "All agents have completed their tasks. Report generation is underway."
+    temp_response = (
+        "All agents have completed their tasks. Report generation is underway."
+    )
+    return temp_response

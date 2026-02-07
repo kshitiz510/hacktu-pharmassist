@@ -396,10 +396,10 @@ export function ChatSidebar({
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ duration: 0.2, delay: 0.1 }}
-          className="flex flex-col h-full"
+          className="flex flex-col h-full overflow-hidden"
         >
-          {/* Logo/Brand Header */}
-          <div className="p-4 border-b border-border">
+          {/* Logo/Brand Header - Fixed at top */}
+          <div className="flex-shrink-0 p-4 border-b border-border">
             <div className="flex items-center justify-between mb-4">
               <button
                 onClick={() => onSelectChat(null)}
@@ -454,8 +454,8 @@ export function ChatSidebar({
             </motion.button>
           </div>
 
-          {/* Search */}
-          <div className="px-4 py-3 border-b border-border">
+          {/* Search - Fixed at top */}
+          <div className="flex-shrink-0 px-4 py-3 border-b border-border">
             <div className="relative">
               <Search
                 size={16}
@@ -480,8 +480,8 @@ export function ChatSidebar({
             </div>
           </div>
 
-          {/* Chat List */}
-          <ScrollArea className="flex-1 px-3 py-3">
+          {/* Chat List - Scrollable area */}
+          <div className="flex-1 overflow-y-auto px-3 py-3 min-h-0">
             {sortedChats.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-12 text-center px-4">
                 <div className="w-16 h-16 rounded-2xl bg-muted flex items-center justify-center mb-4">
@@ -505,9 +505,9 @@ export function ChatSidebar({
                 {renderGroup("Older", groupedChats.older)}
               </div>
             )}
-          </ScrollArea>
+          </div>
 
-          {/* Undo Toast */}
+          {/* Undo Toast - Fixed at bottom of scrollable area */}
           <AnimatePresence>
             {showUndo && deletedChat && (
               <motion.div
@@ -545,8 +545,8 @@ export function ChatSidebar({
             )}
           </AnimatePresence>
 
-          {/* Footer */}
-          <div className="p-4 border-t border-border bg-card">
+          {/* Footer - Fixed at bottom */}
+          <div className="flex-shrink-0 p-4 border-t border-border bg-card">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
