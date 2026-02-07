@@ -674,6 +674,7 @@ def build_exim_visualizations(payload: dict) -> List[dict]:
     input_data = payload.get("input", {})
     trade_data = payload.get("trade_data", {})
     analysis = payload.get("analysis", {})
+    llm_insights = payload.get("llm_insights", {})
     
     summary = analysis.get("summary", {})
     top_partners = analysis.get("top_partners", [])
@@ -683,6 +684,17 @@ def build_exim_visualizations(payload: dict) -> List[dict]:
     trade_type = input_data.get("trade_type", "export").title()
     year = input_data.get("year", "2024-25")
     hs_code = input_data.get("hs_code", "")
+    data_source = payload.get("data_source", "Trade API")
+    
+    # Add summary description as text if available
+    if llm_insights.get("summary_description"):
+        viz.append({
+            "id": "exim_summary",
+            "vizType": "text",
+            "title": f"Trade Intelligence Summary - {product.title()}",
+            "description": llm_insights.get("summary_description"),
+            "data": {"content": llm_insights.get("summary_description")},
+        })
     
     # 1. Top Trading Partners Bar Chart
     if top_partners:
@@ -690,11 +702,14 @@ def build_exim_visualizations(payload: dict) -> List[dict]:
             {"partner": p.get("name", "Unknown")[:20], "value": p.get("current_value", 0)}
             for p in top_partners[:10]  # Top 10
         ]
+        description = f"Trade values in USD Million for HS Code: {hs_code}"
+        if llm_insights.get("trade_volume_description"):
+            description += f"\n\n{llm_insights.get('trade_volume_description')}"
         viz.append(
             build_bar_chart(
                 id="top_trading_partners",
                 title=f"Top {trade_type} Partners for {product.title()} ({year})",
-                description=f"Trade values in USD Million for HS Code: {hs_code}",
+                description=description,
                 items=partner_data,
                 x_field="partner",
                 y_field="value",
@@ -751,7 +766,7 @@ def build_exim_visualizations(payload: dict) -> List[dict]:
             build_table(
                 id="trade_data_table",
                 title=f"{trade_type} Trade Data - {product.title()}",
-                description=f"Detailed trade statistics for HS Code: {hs_code}",
+                description=f"Detailed trade statistics for HS Code: {hs_code}. Data source: {data_source}",
                 columns=columns,
                 rows=rows[:20],  # Top 20 records
                 page_size=15,
@@ -816,5 +831,124 @@ def build_exim_visualizations(payload: dict) -> List[dict]:
                 items=share_data,
             )
         )
+    
+    # 6. Sourcing Insights (from LLM data)
+    sourcing = llm_insights.get("sourcing_insights", {})
+    if sourcing:
+        primary_sources = sourcing.get("primary_sources", [])
+        if primary_sources:
+            # Sourcing table
+            sourcing_rows = []
+            for src in primary_sources:
+                sourcing_rows.append({
+                    "country": src.get("country", "Unknown"),
+                    "share": f"{src.get('share_percent', 0)}%",
+                    "quality": src.get("quality_rating", "Medium"),
+                    "risk": src.get("risk_level", "Medium"),
+                })
+            
+            viz.append(
+                build_table(
+                    id="sourcing_insights_table",
+                    title="Sourcing Insights - Primary Supply Sources",
+                    description=sourcing.get("description", "Analysis of primary supply sources and their risk profiles"),
+                    columns=[
+                        {"key": "country", "label": "Country"},
+                        {"key": "share", "label": "Market Share"},
+                        {"key": "quality", "label": "Quality Rating"},
+                        {"key": "risk", "label": "Risk Level"},
+                    ],
+                    rows=sourcing_rows,
+                    page_size=10,
+                )
+            )
+        
+        # Supply concentration metric
+        hhi = sourcing.get("hhi_index", 0)
+        if hhi:
+            viz.append(
+                build_metric_card(
+                    id="hhi_index",
+                    title="Supply Concentration (HHI Index)",
+                    value=round(hhi, 0),
+                    unit="",
+                )
+            )
+        
+        # Diversification recommendation as text
+        if sourcing.get("diversification_recommendation"):
+            viz.append({
+                "id": "sourcing_recommendation",
+                "vizType": "text",
+                "title": "Sourcing Strategy Recommendation",
+                "description": sourcing.get("diversification_recommendation"),
+                "data": {"content": sourcing.get("diversification_recommendation")},
+            })
+    
+    # 7. Import Dependency Analysis (from LLM data)
+    dependency = llm_insights.get("import_dependency", {})
+    if dependency:
+        critical_deps = dependency.get("critical_dependencies", [])
+        if critical_deps:
+            # Dependency table
+            dep_rows = []
+            for dep in critical_deps:
+                alternatives = dep.get("alternative_sources", [])
+                alt_str = ", ".join(alternatives[:3]) if alternatives else "Limited options"
+                dep_rows.append({
+                    "country": dep.get("country", "Unknown"),
+                    "import_share": f"{dep.get('import_share', 0)}%",
+                    "risk": dep.get("risk", "Medium"),
+                    "alternatives": alt_str,
+                })
+            
+            viz.append(
+                build_table(
+                    id="import_dependency_table",
+                    title="Import Dependency Analysis",
+                    description=dependency.get("description", "Critical import dependencies and supply chain risk assessment"),
+                    columns=[
+                        {"key": "country", "label": "Country"},
+                        {"key": "import_share", "label": "Import Share"},
+                        {"key": "risk", "label": "Risk Level"},
+                        {"key": "alternatives", "label": "Alternative Sources"},
+                    ],
+                    rows=dep_rows,
+                    page_size=10,
+                )
+            )
+        
+        # Dependency ratio metric
+        dep_ratio = dependency.get("dependency_ratio", 0)
+        if dep_ratio:
+            viz.append(
+                build_metric_card(
+                    id="dependency_ratio",
+                    title="Import Dependency Ratio",
+                    value=round(dep_ratio, 1),
+                    unit="%",
+                )
+            )
+        
+        # Risk assessment and recommendations as text
+        if dependency.get("risk_assessment"):
+            viz.append({
+                "id": "risk_assessment",
+                "vizType": "text",
+                "title": "Supply Chain Risk Assessment",
+                "description": dependency.get("risk_assessment"),
+                "data": {"content": dependency.get("risk_assessment")},
+            })
+        
+        recommendations = dependency.get("recommendations", [])
+        if recommendations:
+            rec_text = "\n".join([f"• {rec}" for rec in recommendations])
+            viz.append({
+                "id": "strategic_recommendations",
+                "vizType": "text",
+                "title": "Strategic Recommendations",
+                "description": rec_text,
+                "data": {"content": rec_text},
+            })
     
     return viz

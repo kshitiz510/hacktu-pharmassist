@@ -8,6 +8,7 @@ from app.services.viz_builder import build_exim_visualizations
 from .tools.fetch_exim_data import fetch_exim_data, _fetch_exim_data_impl
 
 llm = LLM(model="groq/llama-3.3-70b-versatile", max_tokens=400)
+llm_large = LLM(model="groq/llama-3.3-70b-versatile", max_tokens=4096)
 
 exim_agent = Agent(
     role="EXIM Trends Agent",
@@ -158,6 +159,181 @@ Return ONLY a JSON object, nothing else:"""
     return product, year, country, trade_type
 
 
+def _llm_generate_exim_data(product: str, year: str, country: str | None, trade_type: str) -> dict:
+    """
+    Generate EXIM trade data using LLM when API data is unavailable.
+    Returns structured data for Trade Volume, Sourcing Insights, and Import Dependency.
+    """
+    prompt = f"""You are a pharmaceutical trade intelligence expert. Generate realistic export-import trade data for the following query.
+
+Product: {product}
+Year: {year}
+Country Focus: {country or "Global"}
+Trade Type: {trade_type}
+
+Generate a comprehensive JSON response with EXACTLY this structure:
+{{
+    "trade_volume": {{
+        "total_value_usd_million": <number>,
+        "previous_year_value": <number>,
+        "yoy_growth_percent": <number>,
+        "top_exporters": [
+            {{"country": "Country Name", "value": <number>, "share": <number>, "growth": <number>}},
+            ... (10 countries)
+        ],
+        "trend_description": "Brief analysis of export trends"
+    }},
+    "sourcing_insights": {{
+        "primary_sources": [
+            {{"country": "Country Name", "share_percent": <number>, "quality_rating": "High/Medium/Low", "risk_level": "Low/Medium/High"}},
+            ... (5 countries)
+        ],
+        "supply_concentration": "High/Medium/Low",
+        "hhi_index": <number between 0-10000>,
+        "diversification_recommendation": "Brief recommendation",
+        "description": "Analysis of sourcing patterns and supply chain"
+    }},
+    "import_dependency": {{
+        "critical_dependencies": [
+            {{"country": "Country Name", "import_share": <number>, "risk": "High/Medium/Low", "alternative_sources": ["Country1", "Country2"]}},
+            ... (top dependencies)
+        ],
+        "total_import_value_usd_million": <number>,
+        "dependency_ratio": <number 0-100>,
+        "risk_assessment": "Overall risk assessment description",
+        "recommendations": ["Recommendation 1", "Recommendation 2", "Recommendation 3"],
+        "description": "Analysis of import dependencies and supply chain risks"
+    }},
+    "summary_description": "Comprehensive 2-3 paragraph summary of the pharmaceutical trade landscape for {product}, including market dynamics, key trends, and strategic insights."
+}}
+
+IMPORTANT RULES:
+1. Use realistic trade values based on pharmaceutical industry benchmarks
+2. Include major pharmaceutical trading nations (India, China, Germany, USA, Switzerland, Belgium, Ireland, UK, France, Italy)
+3. Values should be in USD millions
+4. Growth rates typically range from -15% to +25% for pharma products
+5. Make the data internally consistent (shares should add up reasonably, growth rates should match value changes)
+6. For {product}, consider its actual market position and trade patterns
+
+Return ONLY the JSON object, no additional text."""
+
+    try:
+        raw = llm_large.call(messages=[{"role": "user", "content": prompt}])
+    except Exception:
+        try:
+            raw = llm_large.call(prompt)
+        except Exception as e:
+            print(f"[EXIM] LLM fallback failed: {e}")
+            return None
+
+    if not isinstance(raw, str):
+        raw = str(raw)
+
+    # Extract JSON from response
+    start = raw.find("{")
+    end = raw.rfind("}")
+    if start == -1 or end == -1 or end < start:
+        print(f"[EXIM] No JSON found in LLM fallback response")
+        return None
+
+    try:
+        data = json.loads(raw[start : end + 1])
+        print(f"[EXIM] LLM fallback generated data successfully")
+        return data
+    except json.JSONDecodeError as e:
+        print(f"[EXIM] Failed to parse LLM fallback JSON: {e}")
+        return None
+
+
+def _build_payload_from_llm_data(llm_data: dict, product: str, year: str, country: str | None, trade_type: str) -> dict:
+    """Convert LLM-generated data into the standard payload format."""
+    
+    trade_volume = llm_data.get("trade_volume", {})
+    sourcing = llm_data.get("sourcing_insights", {})
+    dependency = llm_data.get("import_dependency", {})
+    
+    # Build top_partners from trade_volume data
+    top_partners = []
+    for exporter in trade_volume.get("top_exporters", []):
+        top_partners.append({
+            "name": exporter.get("country", "Unknown"),
+            "current_value": exporter.get("value", 0),
+            "previous_value": exporter.get("value", 0) / (1 + exporter.get("growth", 0) / 100) if exporter.get("growth", 0) != -100 else 0,
+            "growth": exporter.get("growth", 0),
+            "share": exporter.get("share", 0),
+        })
+    
+    # Build rows for table display
+    rows = []
+    for i, partner in enumerate(top_partners, 1):
+        rows.append({
+            "S.No.": str(i),
+            "Country": partner["name"],
+            "2024 - 2025": str(round(partner["current_value"], 2)),
+            "2023 - 2024": str(round(partner["previous_value"], 2)),
+            "%Share": str(round(partner["share"], 2)),
+            "%Growth": str(round(partner["growth"], 2)),
+        })
+    
+    return {
+        "input": {
+            "product": product,
+            "hs_code": _get_hsn_code(product),
+            "year": year,
+            "country": country,
+            "trade_type": trade_type,
+        },
+        "trade_data": {
+            "rows": rows,
+            "totals": {
+                "Total": str(trade_volume.get("total_value_usd_million", 0)),
+            },
+            "columns": ["S.No.", "Country", "2023 - 2024", "%Share", "2024 - 2025", "%Growth"],
+            "total_records": len(rows),
+        },
+        "analysis": {
+            "summary": {
+                "product": product,
+                "hs_code": _get_hsn_code(product),
+                "year": year,
+                "trade_type": trade_type,
+                "total_current_year": trade_volume.get("total_value_usd_million", 0),
+                "total_previous_year": trade_volume.get("previous_year_value", 0),
+                "overall_growth": trade_volume.get("yoy_growth_percent", 0),
+                "top_partners_count": len(top_partners),
+            },
+            "top_partners": top_partners,
+            "columns_used": {
+                "current_year": "2024 - 2025",
+                "previous_year": "2023 - 2024",
+                "growth": "%Growth",
+                "share": "%Share",
+                "country": "Country",
+            },
+        },
+        "llm_insights": {
+            "trade_volume_description": trade_volume.get("trend_description", ""),
+            "sourcing_insights": {
+                "primary_sources": sourcing.get("primary_sources", []),
+                "supply_concentration": sourcing.get("supply_concentration", "Medium"),
+                "hhi_index": sourcing.get("hhi_index", 0),
+                "diversification_recommendation": sourcing.get("diversification_recommendation", ""),
+                "description": sourcing.get("description", ""),
+            },
+            "import_dependency": {
+                "critical_dependencies": dependency.get("critical_dependencies", []),
+                "total_import_value": dependency.get("total_import_value_usd_million", 0),
+                "dependency_ratio": dependency.get("dependency_ratio", 0),
+                "risk_assessment": dependency.get("risk_assessment", ""),
+                "recommendations": dependency.get("recommendations", []),
+                "description": dependency.get("description", ""),
+            },
+            "summary_description": llm_data.get("summary_description", ""),
+        },
+        "data_source": "LLM-Generated (API data unavailable)",
+    }
+
+
 def run_exim_agent(
     user_prompt: str,
     *,
@@ -166,7 +342,7 @@ def run_exim_agent(
     country: str | None = None,
     trade_type: str | None = None,
 ) -> dict:
-    """Run the EXIM agent. Uses LLM-based prompt extraction and India TradeStats API."""
+    """Run the EXIM agent. Uses LLM-based prompt extraction and India TradeStats API with LLM fallback."""
     print(f"[EXIM] Starting agent with prompt: {user_prompt}")
 
     # Use LLM extraction
@@ -178,7 +354,7 @@ def run_exim_agent(
 
     # Prefer explicit parameters, then LLM extraction
     prod = product or llm_product or "medicines"
-    yr = year or llm_year or "2024-25"
+    yr = year or llm_year or "2024"
     cntry = country or llm_country
     ttype = trade_type or llm_trade_type or "export"
 
@@ -188,11 +364,8 @@ def run_exim_agent(
     print(f"[EXIM] Using HSN code: {hs_code} for product: {prod}")
 
     try:
-        # Fetch trade data from India TradeStats API
+        # Fetch trade data from local data source
         print(f"[EXIM] Fetching trade data: year={yr}, hs_code={hs_code}, trade_type={ttype}")
-        
-        # Report type: 2 = Country-wise, 1 = Commodity-wise
-        report_type = 2
         
         trade_data = _fetch_exim_data_impl(
             drug_name=prod,
@@ -200,45 +373,83 @@ def run_exim_agent(
             country=cntry
         )
 
-        if "error" in trade_data:
-            print(f"[EXIM] Error from fetch_trade_data: {trade_data.get('error')}")
-            return {"status": "error", "message": trade_data.get("error")}
+        # Check if API returned valid data
+        api_success = "error" not in trade_data and trade_data.get("data") is not None
 
-        rows = trade_data.get("rows", [])
-        totals = trade_data.get("totals", {})
-        columns = trade_data.get("columns", [])
+        if api_success:
+            print(f"[EXIM] API returned valid data")
+            rows = trade_data.get("rows", [])
+            totals = trade_data.get("totals", {})
+            columns = trade_data.get("columns", [])
 
-        print(f"[EXIM] Found {len(rows)} trade records")
+            print(f"[EXIM] Found {len(rows)} trade records")
 
-        # Process trade data for analysis
-        processed_data = _process_trade_data(rows, columns, prod, hs_code, yr, ttype)
+            # Process trade data for analysis
+            processed_data = _process_trade_data(rows, columns, prod, hs_code, yr, ttype)
 
-        payload = {
-            "input": {
-                "product": prod,
-                "hs_code": hs_code,
-                "year": yr,
-                "country": cntry,
-                "trade_type": ttype,
-            },
-            "trade_data": {
-                "rows": rows[:20],  # Top 20 countries
-                "totals": totals,
-                "columns": columns,
-                "total_records": len(rows),
-            },
-            "analysis": processed_data,
-        }
+            payload = {
+                "input": {
+                    "product": prod,
+                    "hs_code": hs_code,
+                    "year": yr,
+                    "country": cntry,
+                    "trade_type": ttype,
+                },
+                "trade_data": {
+                    "rows": rows[:20],
+                    "totals": totals,
+                    "columns": columns,
+                    "total_records": len(rows),
+                },
+                "analysis": processed_data,
+                "data_source": "India TradeStats API",
+            }
 
-        return {
-            "status": "success",
-            "data": payload,
-            "visualizations": build_exim_visualizations(payload),
-        }
+            return {
+                "status": "success",
+                "data": payload,
+                "visualizations": build_exim_visualizations(payload),
+            }
+        else:
+            # API failed - use LLM fallback
+            print(f"[EXIM] API data unavailable, using LLM fallback for: {prod}")
+            
+            llm_data = _llm_generate_exim_data(prod, yr, cntry, ttype)
+            
+            if llm_data:
+                payload = _build_payload_from_llm_data(llm_data, prod, yr, cntry, ttype)
+                
+                return {
+                    "status": "success",
+                    "data": payload,
+                    "visualizations": build_exim_visualizations(payload),
+                }
+            else:
+                return {
+                    "status": "error",
+                    "message": f"No trade data available for {prod} and LLM fallback failed",
+                }
+
     except Exception as e:
-        print(f"[EXIM] Error: {str(e)}")
+        print(f"[EXIM] Error: {str(e)}, attempting LLM fallback")
         import traceback
         traceback.print_exc()
+        
+        # Try LLM fallback on exception
+        try:
+            llm_data = _llm_generate_exim_data(prod, yr, cntry, ttype)
+            
+            if llm_data:
+                payload = _build_payload_from_llm_data(llm_data, prod, yr, cntry, ttype)
+                
+                return {
+                    "status": "success",
+                    "data": payload,
+                    "visualizations": build_exim_visualizations(payload),
+                }
+        except Exception as fallback_error:
+            print(f"[EXIM] LLM fallback also failed: {fallback_error}")
+        
         return {"status": "error", "message": str(e)}
 
 
