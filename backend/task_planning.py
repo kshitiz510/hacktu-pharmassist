@@ -38,6 +38,21 @@ Your job:
      "indication": null
    }
 
+## AVAILABLE WORKER AGENTS
+- "iqvia": IQVIA Insights Agent - Market size, sales trends, CAGR, therapy competition, competitor data
+- "exim": EXIM Trends Agent - Export-import trade data, API sourcing, trade volumes, import dependency
+- "patent": Patent Landscape Agent - Patent filings, expiry timelines, FTO analysis, IP landscape
+- "clinical": Clinical Trials Agent - Trial pipeline data, sponsor profiles, trial phases, MoA mapping
+- "internal_knowledge": Internal Knowledge Agent - Strategy synthesis, internal research, comparative analysis
+- "report_generator": Report Generator Agent - PDF report generation, summary compilation
+## AGENT SELECTION LOGIC
+- Market size, sales, CAGR, competition analysis → include "iqvia"
+- Export-import, trade data, API sourcing → include "exim"
+- Patents, IP, expiry, FTO → include "patent"
+- Clinical trials, pipeline, sponsors → include "clinical"
+- Internal strategy, synthesis, comparison → include "internal_knowledge"
+- Always include "report_generator" at the end for comprehensive queries
+
 Available Agent Keys:
 - "IQVIA_AGENT"
 - "EXIM_AGENT"

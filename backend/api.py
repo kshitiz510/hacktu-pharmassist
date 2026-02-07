@@ -8,7 +8,7 @@ from task_planning import plan_tasks
 from config import API_METADATA, CORS_ORIGINS
 from query_classifier import classify_query
 from db_manager import get_db_manager
-from llm_orchestrator import validate_and_plan_session
+from llm_orchestrator import plan_and_run_session
 
 db = None
 
@@ -133,7 +133,7 @@ async def analyze(request: AnalysisRequest):
         }
 
     # Call orchestrator
-    orchestration = validate_and_plan_session(session)
+    orchestration = plan_and_run_session(session, request.prompt)
 
     agents = orchestration["agents_to_run"]
 
