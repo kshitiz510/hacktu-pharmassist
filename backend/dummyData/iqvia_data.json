@@ -1,0 +1,61 @@
+{
+  "semaglutide_general": {
+    "market_forecast": {
+      "title": "Global GLP-1 Market Forecast (USD Billions)",
+      "data": [
+        { "year": "2021", "value": 8.1 },
+        { "year": "2022", "value": 12.4 },
+        { "year": "2023", "value": 18.7 },
+        { "year": "2024", "value": 28.5 },
+        { "year": "2025", "value": 34.2 }
+      ],
+      "description": "The GLP-1 market demonstrates sustained expansion driven by obesity adoption, cardiovascular outcomes data, and payer reimbursement expansion."
+    },
+    "competitive_share": {
+      "title": "Competitive Market Share (2024)",
+      "data": [
+        { "company": "Novo Nordisk", "share": "~70%" },
+        { "company": "Eli Lilly (Tirzepatide)", "share": "~24%" },
+        { "company": "Others", "share": "~6%" }
+      ],
+      "description": "Market concentration remains high, with limited near-term erosion despite dual-agonist competition."
+    }
+  },
+  "semaglutide_aud": {
+    "market_overview": {
+      "title": "Alcohol Use Disorder (AUD) – Market Overview",
+      "metrics": [
+        { "label": "Global Prevalence", "value": "~280M adults" },
+        { "label": "Diagnosed", "value": "~110M" },
+        { "label": "On Medication", "value": "<10%" },
+        { "label": "Economic Burden", "value": ">$300B / yr" }
+      ]
+    },
+    "existing_therapies": {
+      "title": "Existing AUD Therapies",
+      "data": [
+        { "drug": "Naltrexone", "mechanism": "Opioid antagonism", "efficacy": "Moderate", "limitations": "Adherence, GI effects" },
+        { "drug": "Acamprosate", "mechanism": "Glutamate modulation", "efficacy": "Low–Mod", "limitations": "TID dosing" },
+        { "drug": "Disulfiram", "mechanism": "Aversion", "efficacy": "Low", "limitations": "Safety, compliance" }
+      ]
+    },
+    "aud_signal": {
+      "title": "Semaglutide – AUD Signal (IQVIA Assessment)",
+      "observed_effects": "Reduced craving, lower reward-seeking, improved impulse control",
+      "key_points": [
+        "GLP-1 receptors present in reward circuitry",
+        "Metabolic–dopaminergic pathway overlap",
+        "Real-world behavioral signal in GLP-1 users"
+      ]
+    },
+    "commercial_scenario": {
+      "title": "AUD Repurposing – Commercial Scenario",
+      "data": [
+        { "metric": "Addressable Patients (US+EU)", "value": "40–50M" },
+        { "metric": "Peak Penetration", "value": "5–8%" },
+        { "metric": "Net Price / Year", "value": "$4k–6k" },
+        { "metric": "Peak Sales", "value": "$8–12B", "highlight": true }
+      ]
+    }
+  }
+}
