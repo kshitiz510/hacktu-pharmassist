@@ -210,6 +210,8 @@ export default function GeminiDashboard() {
   const rawAgentData = latestAgentsEntry?.agents || activeChat?.agentsData || {};
   const agentData = normalizeAgentKeys(rawAgentData);
 
+  const hasAgentData = Object.keys(agentData).length > 0;
+
   // Debug logging
   useEffect(() => {
     console.log("[Dashboard] Raw chats from useChatManager:", chats);
@@ -241,9 +243,9 @@ export default function GeminiDashboard() {
     setApiError(null);
     setIsPinned(false);
     setSelectedAgent(null);
-    // Show chat view by default for new or existing chats
-    setShowAgentFlowLocal(false);
-  }, [activeChatId]);
+    // Auto-show agent flow if we have agent data
+    setShowAgentFlowLocal(hasAgentData);
+  }, [activeChatId, hasAgentData]);
 
   const handleNewChat = () => {
     setApiError(null);
@@ -351,7 +353,6 @@ export default function GeminiDashboard() {
       : null;
   const currentAgentIndex = selectedAgentIndex ?? activeAgentIndex;
 
-  const hasAgentData = Object.keys(agentData).length > 0;
   console.log(
     "[Dashboard] hasAgentData:",
     hasAgentData,
@@ -360,9 +361,7 @@ export default function GeminiDashboard() {
   );
 
   const shouldShowAgentFlow =
-    !activeChat ||
-    chatHistory.length === 0 ||
-    (showAgentFlow && (activeAgent !== null || workflowComplete || hasAgentData));
+    !activeChat || chatHistory.length === 0 || (hasAgentData && showAgentFlow);
 
   const sessionId = localStorage.getItem("activeSessionId");
 
@@ -444,46 +443,52 @@ export default function GeminiDashboard() {
         <div className="flex-1 overflow-auto flex flex-col">
           {/* Agent Flow Toggle Bar */}
           {hasAgentData && (
-            <div className="px-6 py-3 border-b border-border bg-card/50 flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="flex items-center gap-2">
+            <div className="mx-6 mt-4 mb-2 p-3 rounded-2xl bg-gradient-to-r from-card/80 to-background/80 border border-white/10 shadow-lg backdrop-blur-md flex items-center justify-between z-10">
+              <div className="flex items-center gap-4 pl-2">
+                <div className="p-2.5 bg-primary/10 rounded-full ring-1 ring-primary/20">
                   <Network className="text-primary" size={18} />
-                  <span className="text-sm font-medium text-foreground">Agent Analysis</span>
-                  {workflowComplete ? (
-                    <span className="px-2 py-0.5 text-xs font-medium bg-emerald-500/20 text-emerald-500 rounded-full">
-                      Complete
-                    </span>
-                  ) : activeAgent !== null ? (
-                    <span className="px-2 py-0.5 text-xs font-medium bg-primary/20 text-primary rounded-full flex items-center gap-1">
-                      <Loader2 size={10} className="animate-spin" />
-                      Running
-                    </span>
-                  ) : null}
                 </div>
-                <span className="text-muted-foreground text-sm">
-                  {Object.keys(agentData).length} agent
-                  {Object.keys(agentData).length !== 1 ? "s" : ""} executed
-                </span>
+                <div className="flex flex-col gap-0.5">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-semibold text-foreground tracking-tight">
+                      Agent Network Overview
+                    </span>
+                    {workflowComplete ? (
+                      <span className="px-2 py-0.5 text-[10px] uppercase tracking-wider font-bold bg-emerald-500/10 text-emerald-500 rounded-full border border-emerald-500/20">
+                        Complete
+                      </span>
+                    ) : activeAgent !== null ? (
+                      <span className="px-2 py-0.5 text-[10px] uppercase tracking-wider font-bold bg-primary/10 text-primary rounded-full border border-primary/20 flex items-center gap-1">
+                        <Loader2 size={10} className="animate-spin" />
+                        Running
+                      </span>
+                    ) : null}
+                  </div>
+                  <span className="text-muted-foreground text-xs font-medium">
+                    {Object.keys(agentData).length} active agent
+                    {Object.keys(agentData).length !== 1 ? "s" : ""} contributing to this analysis
+                  </span>
+                </div>
               </div>
               <motion.button
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
                 onClick={handleToggleAgentFlow}
-                className={`px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 transition-all ${
+                className={`px-4 py-2 rounded-full text-xs font-semibold flex items-center gap-2 transition-all shadow-sm ${
                   showAgentFlow
-                    ? "bg-muted text-foreground hover:bg-muted/80"
-                    : "bg-primary text-primary-foreground hover:bg-primary/90"
+                    ? "bg-secondary text-secondary-foreground hover:bg-secondary/80 border border-border"
+                    : "bg-primary/10 text-primary hover:bg-primary/20 border border-primary/20"
                 }`}
               >
                 {showAgentFlow ? (
                   <>
-                    <X size={16} />
-                    Hide Agents
+                    <X size={14} />
+                    Minimize View
                   </>
                 ) : (
                   <>
-                    <Network size={16} />
-                    Show Agents
+                    <Network size={14} />
+                    View Agents
                   </>
                 )}
               </motion.button>
@@ -861,37 +866,33 @@ export default function GeminiDashboard() {
         </div>
 
         {/* Input */}
-        <div className="border-t border-border p-4 bg-card">
-          <div className="max-w-3xl mx-auto">
-            <div className="flex items-center gap-2">
+        <div className="p-6 bg-transparent z-20">
+          <div className="max-w-3xl mx-auto relative group">
+            <div className="absolute inset-0 bg-gradient-to-r from-primary/20 via-blue-500/20 to-purple-500/20 rounded-full blur-xl opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+            <div className="relative flex items-center">
               <Input
-                placeholder={
-                  !activeChatId
-                    ? "Start a new analysis..."
-                    : chatHistory.length === 0
-                      ? "Type your question..."
-                      : "Continue analyzing..."
-                }
-                className="flex-1 h-12 bg-background border-border rounded-xl text-sm placeholder:text-muted-foreground focus-visible:ring-1 focus-visible:ring-primary"
+                placeholder="Ask anything..."
+                className="w-full h-14 pl-6 pr-14 bg-card/90 backdrop-blur-xl border-white/10 rounded-full text-base shadow-2xl focus-visible:ring-2 focus-visible:ring-primary/50 transition-all placeholder:text-muted-foreground/50"
                 value={prompt}
                 onChange={(e) => setPrompt(e.target.value)}
                 onKeyPress={handleKeyPress}
                 disabled={isLoading}
               />
-              <motion.button
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-                onClick={handleSendPrompt}
-                disabled={isLoading || !prompt.trim()}
-                className={`h-12 px-5 rounded-xl font-semibold flex items-center gap-2 transition-all duration-200 shadow-lg text-primary-foreground ${
-                  isLoading || !prompt.trim()
-                    ? "bg-primary/50 cursor-not-allowed"
-                    : "bg-primary hover:bg-primary/90 shadow-primary/20"
-                }`}
-              >
-                {isLoading ? <Loader2 className="animate-spin" size={16} /> : <Send size={16} />}
-                {isLoading ? "Processing..." : "Send"}
-              </motion.button>
+              <div className="absolute right-2">
+                <motion.button
+                  whileHover={{ scale: 1.05, rotate: 10 }}
+                  whileTap={{ scale: 0.95 }}
+                  onClick={handleSendPrompt}
+                  disabled={isLoading || !prompt.trim()}
+                  className={`h-10 w-10 rounded-full flex items-center justify-center transition-all duration-200 ${
+                    isLoading || !prompt.trim()
+                      ? "bg-muted text-muted-foreground cursor-not-allowed"
+                      : "bg-primary text-primary-foreground shadow-lg shadow-primary/25 hover:shadow-primary/40 gradient-bg"
+                  }`}
+                >
+                  {isLoading ? <Loader2 className="animate-spin" size={18} /> : <Send size={18} />}
+                </motion.button>
+              </div>
             </div>
           </div>
         </div>

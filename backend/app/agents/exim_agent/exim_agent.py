@@ -342,19 +342,33 @@ def run_exim_agent(
     country: str | None = None,
     trade_type: str | None = None,
 ) -> dict:
-    """Run the EXIM agent. Uses LLM-based prompt extraction and India TradeStats API with LLM fallback."""
+    """
+    Run the EXIM agent.
+    
+    If product/year/country/trade_type are provided by orchestrator, use them directly.
+    Otherwise, fall back to LLM extraction for backward compatibility.
+    """
     print(f"[EXIM] Starting agent with prompt: {user_prompt}")
 
-    # Use LLM extraction
-    llm_product, llm_year, llm_country, llm_trade_type = _llm_extract_exim_params(user_prompt)
+    # If parameters provided by orchestrator, use them directly
+    if product:
+        print(f"[EXIM] Using orchestrator-provided params: product={product}, year={year}, country={country}, trade_type={trade_type}")
+        llm_product = product
+        llm_year = year or "2024-25"
+        llm_country = country
+        llm_trade_type = trade_type or "export"
+    else:
+        # Fallback to LLM extraction for backward compatibility
+        print("[EXIM] No params from orchestrator, falling back to LLM extraction...")
+        llm_product, llm_year, llm_country, llm_trade_type = _llm_extract_exim_params(user_prompt)
 
     print(
-        f"[EXIM] LLM extracted: product={llm_product}, year={llm_year}, country={llm_country}, trade_type={llm_trade_type}"
+        f"[EXIM] Final params: product={llm_product}, year={llm_year}, country={llm_country}, trade_type={llm_trade_type}"
     )
 
     # Prefer explicit parameters, then LLM extraction
     prod = product or llm_product or "medicines"
-    yr = year or llm_year or "2024"
+    yr = year or llm_year or "2024-25"
     cntry = country or llm_country
     ttype = trade_type or llm_trade_type or "export"
 

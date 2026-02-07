@@ -101,7 +101,7 @@ Return ONLY a JSON object, nothing else:"""
 
     try:
         raw = llm.call(messages=[{"role": "user", "content": prompt}])
-    except Exception as e:
+    except Exception:
         try:
             # Alternative: try direct string call
             raw = llm.call(prompt)
@@ -151,20 +151,20 @@ def run_patent_agent(
     drug: Optional[str] = None,
     disease: Optional[str] = None,
     jurisdiction: Optional[str] = None,
-    max_patents: int = 10,
+    max_patents: int = 5,
 ) -> Dict[str, Any]:
     """
     Run the patent FTO agent.
     
-    Uses LLM-based prompt extraction followed by a strict tool pipeline:
-    discover_patents → verify_patent_blocking (×N) → fto_decision_engine
+    If drug/disease are provided by orchestrator, use them directly.
+    Otherwise, fall back to LLM extraction for backward compatibility.
     
     Args:
         user_prompt: Natural language query from user
         drug: Override extracted drug name
         disease: Override extracted disease/indication
         jurisdiction: Override extracted jurisdiction (default: US)
-        max_patents: Maximum patents to analyze (default: 10)
+        max_patents: Maximum patents to analyze (default: 5)
     
     Returns:
         Structured response matching clinical_agent output format
@@ -173,11 +173,19 @@ def run_patent_agent(
     analysis_start = datetime.now()
 
     # -------------------------------------------------------------------------
-    # STEP 1: PARSE INPUT (LLM extraction)
+    # STEP 1: PARSE INPUT (use orchestrator params or fallback to LLM extraction)
     # -------------------------------------------------------------------------
-    llm_drug, llm_disease, llm_jurisdiction = _llm_extract_prompt(user_prompt)
+    if drug and disease:
+        print(f"[PATENT] Using orchestrator-provided params: drug={drug}, disease={disease}, jurisdiction={jurisdiction}")
+        llm_drug = drug
+        llm_disease = disease
+        llm_jurisdiction = jurisdiction or "US"
+    else:
+        # Fallback to LLM extraction for backward compatibility
+        print("[PATENT] No params from orchestrator, falling back to LLM extraction...")
+        llm_drug, llm_disease, llm_jurisdiction = _llm_extract_prompt(user_prompt)
 
-    print(f"[PATENT] LLM extracted: drug={llm_drug}, disease={llm_disease}, jurisdiction={llm_jurisdiction}")
+    print(f"[PATENT] Final params: drug={llm_drug}, disease={llm_disease}, jurisdiction={llm_jurisdiction}")
 
     # Prefer explicit parameters, then LLM extraction
     final_drug = drug or llm_drug
@@ -275,7 +283,7 @@ def run_patent_agent(
                 })
 
         # ----- Tool 3: FTO Decision Engine -----
-        print(f"[PATENT] Step 3: Running FTO decision engine")
+        print("[PATENT] Step 3: Running FTO decision engine")
         fto_result = fto_fn(
             patent_verifications=verifications,
             drug=final_drug,

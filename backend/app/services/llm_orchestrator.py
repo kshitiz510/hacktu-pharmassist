@@ -1,6 +1,6 @@
 """
 LLM Orchestrator for PharmAssist
-Temporary stub: dispatches session to worker agents (no real execution yet)
+Dispatches session to worker agents with unified parameter extraction.
 """
 
 from typing import Dict, Any, List
@@ -9,6 +9,7 @@ from app.agents.iqvia_agent.iqvia_agent import run_iqvia_agent
 from app.agents.patent_agent.patent_agent import run_patent_agent
 from app.agents.exim_agent.exim_agent import run_exim_agent
 from app.core.db import DatabaseManager
+from app.services.parameter_extractor import extract_all_parameters
 import datetime
 from app.core.config import MOCK_DATA_DIR
 import json
@@ -48,6 +49,7 @@ def load_agent_data(agent_key: str) -> Dict[str, Any]:
             return data[first_key]
     return data
 
+
 def plan_and_run_session(
     db: DatabaseManager,
     session: Dict[str, Any],
@@ -55,10 +57,16 @@ def plan_and_run_session(
     agents: List[str],
     prompt_id: str,
 ) -> str:
-
     print("\n[ORCHESTRATOR] Session received")
     print(f"Session ID: {session['sessionId']}")
     print("Agents to run:", agents)
+
+    # ========================================================================
+    # UNIFIED PARAMETER EXTRACTION (called once for all agents)
+    # ========================================================================
+    print("[ORCHESTRATOR] Extracting unified parameters from user prompt...")
+    extracted_params = extract_all_parameters(user_query)
+    print(f"[ORCHESTRATOR] Unified params extracted: {extracted_params}")
 
     # Fetch last agent state for context (if exists)
     previous_agents_data = {}
@@ -68,6 +76,9 @@ def plan_and_run_session(
 
     agents_results = previous_agents_data.copy()
 
+    # ========================================================================
+    # RUN AGENTS WITH EXTRACTED PARAMETERS
+    # ========================================================================
     for agent_key in agents:
         db.sessions.update_one(
             {"sessionId": session["sessionId"]},
@@ -80,34 +91,64 @@ def plan_and_run_session(
         )
 
         normalized_key = agent_key.lower().replace("_agent", "")
-        print(f"[ORCHESTRATOR] Running agent: {agent_key} (normalized: {normalized_key})")
+        print(
+            f"[ORCHESTRATOR] Running agent: {agent_key} (normalized: {normalized_key})"
+        )
 
-        if normalized_key == "clinical":
-            data = run_clinical_agent(user_query)
-        elif normalized_key == "iqvia":
-            data = run_iqvia_agent(user_query)
-        elif normalized_key == "exim":
-            data = run_exim_agent(user_query)
-        elif normalized_key == "patent":
-            data = run_patent_agent(user_query)
-        else:
-            data = load_agent_data(agent_key)
+        try:
+            if normalized_key == "clinical":
+                data = run_clinical_agent(
+                    user_query,
+                    drug_name=extracted_params.get("drug"),
+                    condition=extracted_params.get("condition"),
+                    phase=extracted_params.get("phase"),
+                    status=extracted_params.get("trial_status"),
+                )
+            elif normalized_key == "iqvia":
+                data = run_iqvia_agent(
+                    user_query,
+                    search_term=extracted_params.get("search_term"),
+                    therapy_area=extracted_params.get("therapy_area"),
+                    indication=extracted_params.get("indication"),
+                )
+            elif normalized_key == "exim":
+                data = run_exim_agent(
+                    user_query,
+                    product=extracted_params.get("product"),
+                    year=extracted_params.get("year"),
+                    country=extracted_params.get("country"),
+                    trade_type=extracted_params.get("trade_type"),
+                )
+            elif normalized_key == "patent":
+                data = run_patent_agent(
+                    user_query,
+                    drug=extracted_params.get("drug"),
+                    disease=extracted_params.get("indication"),
+                    jurisdiction=extracted_params.get("jurisdiction"),
+                )
+            else:
+                data = load_agent_data(agent_key)
 
-        # Append instead of overwrite
-        if agent_key not in agents_results:
-            agents_results[agent_key] = []
-
-        agents_results[agent_key].append({
-            "timestamp": datetime.datetime.utcnow().isoformat(),
-            "query": user_query,
-            "result": data
-        })
+            # Store agent result directly (not as array)
+            agents_results[agent_key] = {
+                "timestamp": datetime.datetime.utcnow().isoformat(),
+                "query": user_query,
+                "data": data,
+            }
+        except Exception as e:
+            print(f"[ORCHESTRATOR] Error running {agent_key}: {e}")
+            agents_results[agent_key] = {
+                "timestamp": datetime.datetime.utcnow().isoformat(),
+                "query": user_query,
+                "data": {"status": "error", "message": str(e)},
+            }
 
     agent_entry = {
         "promptId": prompt_id,
         "prompt": user_query,
         "timestamp": datetime.datetime.utcnow().isoformat(),
         "agents": agents_results,
+        "extracted_params": extracted_params,
     }
 
     db.sessions.update_one(

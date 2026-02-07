@@ -135,14 +135,28 @@ def run_clinical_agent(
     phase: str | None = None,
     status: str | None = None,
 ) -> dict:
-    """Run the clinical agent. Uses LLM-based prompt extraction only - no regex fallback."""
+    """
+    Run the clinical agent.
+    
+    If drug_name/condition are provided by orchestrator, use them directly.
+    Otherwise, fall back to LLM extraction for backward compatibility.
+    """
     print(f"[CLINICAL] Starting agent with prompt: {user_prompt}")
 
-    # Use LLM extraction (primary method only)
-    llm_drug, llm_condition, llm_phase, llm_status = _llm_extract_prompt(user_prompt)
+    # If parameters provided by orchestrator, use them directly
+    if drug_name and condition:
+        print(f"[CLINICAL] Using orchestrator-provided params: drug={drug_name}, condition={condition}, phase={phase}, status={status}")
+        llm_drug = drug_name
+        llm_condition = condition
+        llm_phase = phase
+        llm_status = status
+    else:
+        # Fallback to LLM extraction for backward compatibility
+        print("[CLINICAL] No params from orchestrator, falling back to LLM extraction...")
+        llm_drug, llm_condition, llm_phase, llm_status = _llm_extract_prompt(user_prompt)
 
     print(
-        f"[CLINICAL] LLM extracted: drug={llm_drug}, condition={llm_condition}, phase={llm_phase}, status={llm_status}"
+        f"[CLINICAL] Final params: drug={llm_drug}, condition={llm_condition}, phase={llm_phase}, status={llm_status}"
     )
 
     # Prefer explicit parameters, then LLM extraction

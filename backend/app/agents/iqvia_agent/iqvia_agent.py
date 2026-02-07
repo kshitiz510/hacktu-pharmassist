@@ -123,14 +123,27 @@ def run_iqvia_agent(
     therapy_area: str | None = None,
     indication: str | None = None,
 ) -> dict:
-    """Run the IQVIA agent. Fetches market data and Statista infographics."""
+    """
+    Run the IQVIA agent.
+    
+    If search_term/therapy_area are provided by orchestrator, use them directly.
+    Otherwise, fall back to LLM extraction for backward compatibility.
+    """
     print(f"[IQVIA] Starting agent with prompt: {user_prompt}")
 
-    # Use LLM extraction
-    llm_search_term, llm_therapy_area, llm_indication = _llm_extract_prompt(user_prompt)
+    # If parameters provided by orchestrator, use them directly
+    if search_term or indication:
+        print(f"[IQVIA] Using orchestrator-provided params: search_term={search_term}, therapy_area={therapy_area}, indication={indication}")
+        llm_search_term = search_term
+        llm_therapy_area = therapy_area
+        llm_indication = indication
+    else:
+        # Fallback to LLM extraction for backward compatibility
+        print("[IQVIA] No params from orchestrator, falling back to LLM extraction...")
+        llm_search_term, llm_therapy_area, llm_indication = _llm_extract_prompt(user_prompt)
 
     print(
-        f"[IQVIA] LLM extracted: search_term={llm_search_term}, therapy_area={llm_therapy_area}, indication={llm_indication}"
+        f"[IQVIA] Final params: search_term={llm_search_term}, therapy_area={llm_therapy_area}, indication={llm_indication}"
     )
 
     # Prefer explicit parameters, then LLM extraction

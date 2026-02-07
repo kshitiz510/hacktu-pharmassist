@@ -33,7 +33,7 @@ User request: {user_prompt}
 
 Return only JSON array.
 """
-    raw = llm.call(prompt)
+    raw = llm.call([{"role": "user", "content": prompt}])
     try:
         # Extract JSON from response
         start = raw.find("[")
