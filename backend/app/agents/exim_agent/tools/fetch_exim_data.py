@@ -7,10 +7,9 @@ from app.core.config import DATA_DIR
 DATA_FILE = Path(DATA_DIR) / "exim_data.json"
 
 
-@tool("fetch_exim_data")
-def fetch_exim_data(drug_name: str, hs_code: str = None, country: str = None) -> dict:
+def _fetch_exim_data_impl(drug_name: str, hs_code: str = None, country: str = None) -> dict:
     """
-    Fetches export-import trade data for APIs and formulations.
+    Internal implementation for fetching export-import trade data.
 
     Args:
         drug_name: Name of the drug or API (e.g., "semaglutide")
@@ -48,3 +47,19 @@ def fetch_exim_data(drug_name: str, hs_code: str = None, country: str = None) ->
         return {"error": "EXIM data file not found", "drug_name": drug_name}
     except json.JSONDecodeError:
         return {"error": "Failed to parse EXIM data", "drug_name": drug_name}
+
+
+@tool("fetch_exim_data")
+def fetch_exim_data(drug_name: str, hs_code: str = None, country: str = None) -> dict:
+    """
+    Fetches export-import trade data for APIs and formulations.
+
+    Args:
+        drug_name: Name of the drug or API (e.g., "semaglutide")
+        hs_code: HS code for the product (optional)
+        country: Country to focus on (optional)
+
+    Returns:
+        Dictionary containing trade volumes, price trends, and import dependency data
+    """
+    return _fetch_exim_data_impl(drug_name, hs_code, country)

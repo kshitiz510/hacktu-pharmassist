@@ -246,6 +246,13 @@ export function EXIMDataDisplay({ data, showChart }) {
     return <FallbackDisplay agentName="EXIM" />;
   }
 
+  // Check if this is new structured data with visualizations array
+  if (data.visualizations && Array.isArray(data.visualizations)) {
+    // New format - visualizations will be rendered by the main visualization system
+    return null;
+  }
+
+  // Legacy format support
   const tradeVolume = data.trade_volume;
   const priceTrend = data.price_trend;
   const importDependency = data.import_dependency;
@@ -429,6 +436,14 @@ export function PatentDataDisplay({ data, isFirstPrompt }) {
     return <FallbackDisplay agentName="Patent" />;
   }
 
+  // NEW: Check if this is real patent agent data (has visualizations array)
+  if (data.visualizations && Array.isArray(data.visualizations)) {
+    // This is real patent FTO data - it will be rendered by the main visualization system
+    // Return null here since visualizations are rendered separately
+    return null;
+  }
+
+  // LEGACY: Old mock data structure for backwards compatibility
   if (isFirstPrompt) {
     const landscapeOverview = data.landscape_overview;
     const repurposingStrategy = data.repurposing_strategy;

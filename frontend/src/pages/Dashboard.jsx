@@ -485,7 +485,7 @@ export default function GeminiDashboard() {
                     }}
                   >
                     {/* Orchestrator Box */}
-                    <div className="flex justify-center mb-10 relative z-10">
+                    <div className="flex justify-center pt-24  mb-10 relative z-10">
                       <motion.div
                         initial={{ opacity: 0, y: -20, scale: 0.95 }}
                         animate={{ opacity: 1, y: 0, scale: 1 }}
@@ -556,7 +556,7 @@ export default function GeminiDashboard() {
                               } ${
                                 activeAgentIndex !== null || workflowComplete
                                   ? "h-auto"
-                                  : "h-full min-h-[185px]"
+                                  : "h-full min-h-[210px]"
                               } ${hasData ? "cursor-pointer" : "cursor-default"}`}
                               onClick={() => {
                                 if (!hasData) return;
@@ -567,40 +567,40 @@ export default function GeminiDashboard() {
                               <CardContent
                                 className={`${
                                   activeAgentIndex !== null || workflowComplete
-                                    ? "p-2.5 flex flex-row items-center gap-2.5"
-                                    : "p-3 flex flex-col h-full"
+                                    ? "p-3 flex flex-row items-center gap-3"
+                                    : "p-4 flex flex-col h-full"
                                 }`}
                               >
                                 <div
-                                  className={`flex items-center gap-2 shrink-0 ${
-                                    activeAgentIndex === null && !workflowComplete ? "mb-2" : ""
+                                  className={`flex items-center gap-2.5 shrink-0 ${
+                                    activeAgentIndex === null && !workflowComplete ? "mb-3" : ""
                                   }`}
                                 >
                                   <motion.div
                                     className={`${
                                       activeAgentIndex !== null || workflowComplete
-                                        ? "p-1.5 rounded-lg"
-                                        : "p-2 rounded-lg"
+                                        ? "p-2 rounded-lg"
+                                        : "p-3 rounded-lg"
                                     } ${colors.icon} border`}
                                     whileHover={{ scale: 1.1 }}
                                   >
                                     <Icon
                                       className={colors.iconColor}
-                                      size={activeAgentIndex !== null || workflowComplete ? 16 : 18}
+                                      size={activeAgentIndex !== null || workflowComplete ? 18 : 22}
                                     />
                                   </motion.div>
                                   <div className="flex-1 min-w-0">
                                     <h3
                                       className={`font-semibold text-foreground ${
                                         activeAgentIndex !== null || workflowComplete
-                                          ? "text-xs"
-                                          : "text-sm"
+                                          ? "text-sm"
+                                          : "text-base"
                                       } truncate`}
                                     >
                                       {agent.name}
                                     </h3>
                                     {(activeAgent !== null || workflowComplete) && (
-                                      <p className="text-[10px] text-muted-foreground truncate leading-tight">
+                                      <p className="text-xs text-muted-foreground truncate leading-tight">
                                         {agent.desc}
                                       </p>
                                     )}
@@ -608,12 +608,12 @@ export default function GeminiDashboard() {
                                   {isActive && !reportReady && (
                                     <Loader2
                                       className={`animate-spin ${colors.iconColor}`}
-                                      size={16}
+                                      size={18}
                                     />
                                   )}
                                 </div>
                                 {activeAgentIndex === null && !workflowComplete && (
-                                  <div className="mt-3 flex-1 flex flex-col text-xs text-muted-foreground gap-2">
+                                  <div className="mt-3 flex-1 flex flex-col text-sm text-muted-foreground gap-2.5">
                                     {agent.features.map((feature, i) => (
                                       <motion.div
                                         key={i}
@@ -727,12 +727,14 @@ export default function GeminiDashboard() {
                 </motion.div>
               ) : !sessionId ? (
                 /* Initialization Screen */
-                <LandingPage
-                  onStartNewChat={handleNewChat}
-                  showFullGrid={true}
-                  apiError={apiError}
-                  isLoading={isLoading}
-                />
+                <div className="pt-16">
+                  {/* <LandingPage
+                    onStartNewChat={handleNewChat}
+                    showFullGrid={true}
+                    apiError={apiError}
+                    isLoading={isLoading}
+                  /> */}
+                </div>
               ) : (
                 /* Chat Interface View */
                 <motion.div

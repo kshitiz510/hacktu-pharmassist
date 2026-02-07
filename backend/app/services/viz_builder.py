@@ -394,3 +394,427 @@ def build_iqvia_visualizations(payload: dict) -> List[dict]:
         )
 
     return viz
+
+
+def build_patent_visualizations(payload: dict) -> List[dict]:
+    """Create a standard set of visualizations from the Patent FTO agent payload.
+    
+    Follows the same pattern as build_clinical_visualizations().
+    Enhanced to support new FTO Risk Index (0-100) and multi-layer summaries.
+    """
+    viz: List[dict] = []
+
+    if not payload:
+        return viz
+
+    fto = payload.get("fto", {})
+    discovery = payload.get("discovery", {})
+    verifications = payload.get("verifications", [])
+    parsed_input = payload.get("input", {})
+
+    # Extract data from FTO result (support both old and new fields)
+    fto_risk_index = fto.get("ftoRiskIndex", 0)
+    fto_risk_band = fto.get("ftoRiskBand", "LOW")
+    fto_status = fto.get("ftoStatus", "UNKNOWN")
+    confidence = fto.get("confidence", "LOW")
+    blocking_patents = fto.get("blockingPatents", [])
+    non_blocking_patents = fto.get("nonBlockingPatents", [])
+    expired_patents = fto.get("expiredPatents", [])
+    uncertain_patents = fto.get("uncertainPatents", [])
+    earliest_freedom_date = fto.get("earliestFreedomDate")
+    recommended_actions = fto.get("recommendedActions", [])
+    # NOTE: Removed scoring_notes and raw_score - internal artifacts not for display
+
+    # ----- Risk Band Card (primary metric) -----
+    viz.append(
+        build_metric_card(
+            id="fto_risk_band",
+            title="FTO Risk Level",
+            value=fto_risk_band,
+        )
+    )
+
+    # ----- FTO Status Card (human readable status) -----
+    status_display = {
+        "CLEAR": "CLEAR",
+        "LOW_RISK": "LOW RISK",
+        "MODERATE_RISK": "MODERATE RISK",
+        "HIGH_RISK": "HIGH RISK",
+    }
+    viz.append(
+        build_metric_card(
+            id="fto_status",
+            title="FTO Status",
+            value=status_display.get(fto_status, fto_status),
+        )
+    )
+
+    # ----- Confidence Card (simplified: HIGH/MEDIUM/LOW) -----
+    viz.append(
+        build_metric_card(
+            id="confidence",
+            title="Analysis Confidence",
+            value=confidence,
+        )
+    )
+
+    # ----- Patents Discovered Card (use totalFound from API, not filtered count) -----
+    patents_discovered = discovery.get("totalFound", len(discovery.get("patents", [])))
+    viz.append(
+        build_metric_card(
+            id="patents_discovered",
+            title="Patents Found",
+            value=patents_discovered,
+        )
+    )
+
+    # ----- Earliest Freedom Date Card -----
+    if earliest_freedom_date:
+        viz.append(
+            build_metric_card(
+                id="freedom_date",
+                title="Freedom Date",
+                value=earliest_freedom_date,
+            )
+        )
+
+    # ----- Patent Breakdown Pie Chart (Fixed: explicit labels, no NaN) -----
+    # Use explicit string labels and include all categories even if zero
+    patent_breakdown = {}
+    
+    # Always use explicit string keys (prevents NaN in legend)
+    blocking_count = len(blocking_patents) if blocking_patents else 0
+    non_blocking_count = len(non_blocking_patents) if non_blocking_patents else 0
+    expired_count = len(expired_patents) if expired_patents else 0
+    uncertain_count = len(uncertain_patents) if uncertain_patents else 0
+    
+    # Only add categories with non-zero counts - ensure values are integers
+    if blocking_count > 0:
+        patent_breakdown["Blocking"] = int(blocking_count)
+    if non_blocking_count > 0:
+        patent_breakdown["Non-blocking"] = int(non_blocking_count)
+    if expired_count > 0:
+        patent_breakdown["Expired"] = int(expired_count)
+    if uncertain_count > 0:
+        patent_breakdown["Uncertain"] = int(uncertain_count)
+    
+    # Assertion: all keys must be non-empty strings and values must be positive integers
+    assert all(isinstance(k, str) and k for k in patent_breakdown.keys()), \
+        "Pie chart labels must be non-empty strings"
+    assert all(isinstance(v, int) and v > 0 for v in patent_breakdown.values()), \
+        f"Pie chart values must be positive integers, got {patent_breakdown}"
+    
+    # Always render pie chart if any patents were analyzed
+    total_patents = blocking_count + non_blocking_count + expired_count + uncertain_count
+    if total_patents > 0:
+        viz.append(
+            build_pie_chart(
+                id="patent_breakdown",
+                title="Patent Breakdown",
+                items=patent_breakdown,
+                description=f"Distribution of {total_patents} analyzed patent(s) by blocking status",
+            )
+        )
+
+    # ----- Blocking Patents Table (Enhanced v2: normalizedRisk, riskBand, sourceUrl) -----
+    if blocking_patents:
+        blocking_rows = []
+        for p in blocking_patents:
+            # Get normalized risk (0-100) with assertion
+            normalized_risk = p.get("normalizedRisk", 50)
+            assert isinstance(normalized_risk, (int, float)) and 0 <= normalized_risk <= 100, \
+                f"normalizedRisk must be 0-100 integer, got {normalized_risk}"
+            
+            blocking_rows.append({
+                "patent": p.get("patent", "Unknown"),
+                "patentUrl": p.get("sourceUrl", ""),
+                "title": p.get("title", "")[:50] + "..." if len(p.get("title", "")) > 50 else p.get("title", "Unknown"),
+                "status": p.get("status", "Blocking"),
+                "claimType": p.get("claimType", "Unknown"),
+                "expiry": p.get("expectedExpiry", p.get("expiry", "Unknown")),
+                "normalizedRisk": int(normalized_risk),  # 0-100 integer
+                "riskBand": p.get("riskBand", "HIGH"),
+                "reason": p.get("reason", "Blocks intended use"),
+            })
+        
+        viz.append(
+            build_table(
+                id="blocking_patents",
+                title="Blocking Patents",
+                columns=[
+                    {"key": "patent", "label": "Patent Number"},
+                    {"key": "claimType", "label": "Claim Type"},
+                    {"key": "expiry", "label": "Expiry Date"},
+                    {"key": "normalizedRisk", "label": "Risk (0-100)"},
+                    {"key": "riskBand", "label": "Risk Band"},
+                    {"key": "reason", "label": "Reason"},
+                ],
+                rows=blocking_rows,
+                description="Patents that may block freedom to operate",
+            )
+        )
+
+    # ----- Claim Type Distribution (if blocking patents exist) -----
+    if blocking_patents:
+        claim_types = {}
+        for p in blocking_patents:
+            ct = p.get("claimType", "Unknown")
+            claim_types[ct] = claim_types.get(ct, 0) + 1
+        
+        if claim_types:
+            viz.append(
+                build_pie_chart(
+                    id="claim_types",
+                    title="Blocking Patent Claim Types",
+                    items=claim_types,
+                    description="Distribution of claim types among blocking patents",
+                )
+            )
+
+    # ----- Non-Blocking Patents Table (if any) -----
+    if non_blocking_patents:
+        non_blocking_rows = []
+        for p in non_blocking_patents:
+            non_blocking_rows.append({
+                "patent": p.get("patent", "Unknown"),
+                "patentUrl": p.get("sourceUrl", ""),
+                "claimType": p.get("claimType", "Unknown"),
+                "reason": p.get("reason", "Does not block intended use"),
+                "expiry": p.get("expectedExpiry", p.get("expiry", "Unknown")),
+            })
+        
+        viz.append(
+            build_table(
+                id="non_blocking_patents",
+                title="Non-Blocking Patents",
+                columns=[
+                    {"key": "patent", "label": "Patent Number"},
+                    {"key": "claimType", "label": "Claim Type"},
+                    {"key": "expiry", "label": "Expiry Date"},
+                    {"key": "reason", "label": "Reason"},
+                ],
+                rows=non_blocking_rows,
+                description="Patents analyzed but found not to block the intended use",
+            )
+        )
+
+    # ----- Recommended Actions Table (Enhanced with feasibility) -----
+    if recommended_actions:
+        action_rows = []
+        for i, action in enumerate(recommended_actions):
+            if isinstance(action, dict):
+                action_rows.append({
+                    "priority": i + 1,
+                    "action": action.get("action", "Unknown"),
+                    "rationale": action.get("rationale", "")[:100] + "..." if len(action.get("rationale", "")) > 100 else action.get("rationale", ""),
+                    "feasibility": action.get("feasibility", "MEDIUM"),
+                    "nextSteps": ", ".join(action.get("nextSteps", [])[:2]) if action.get("nextSteps") else "",
+                })
+            else:
+                # Legacy string format
+                action_rows.append({
+                    "priority": i + 1,
+                    "action": str(action),
+                    "rationale": "",
+                    "feasibility": "MEDIUM",
+                    "nextSteps": "",
+                })
+        
+        viz.append(
+            build_table(
+                id="recommended_actions",
+                title="Recommended Actions",
+                columns=[
+                    {"key": "priority", "label": "#"},
+                    {"key": "action", "label": "Action"},
+                    {"key": "feasibility", "label": "Feasibility"},
+                    {"key": "rationale", "label": "Rationale"},
+                    {"key": "nextSteps", "label": "Next Steps"},
+                ],
+                rows=action_rows,
+                description="Prioritized list of recommended next steps with feasibility ratings",
+            )
+        )
+
+    # ----- Expired Patents Table (if any) -----
+    if expired_patents:
+        expired_rows = []
+        for p in expired_patents:
+            if isinstance(p, dict):
+                expired_rows.append({
+                    "patent": p.get("patent", "Unknown"),
+                    "expiry": p.get("expectedExpiry", "Expired"),
+                })
+            else:
+                expired_rows.append({"patent": str(p), "expiry": "Expired"})
+        
+        viz.append(
+            build_table(
+                id="expired_patents",
+                title="Expired Patents",
+                columns=[
+                    {"key": "patent", "label": "Patent Number"},
+                    {"key": "expiry", "label": "Expiry Date"},
+                ],
+                rows=expired_rows,
+                description="Patents that have already expired",
+            )
+        )
+
+    return viz
+
+
+def build_exim_visualizations(payload: dict) -> List[dict]:
+    """Create a standard set of visualizations from the EXIM agent payload."""
+    viz: List[dict] = []
+    
+    if not payload:
+        return viz
+    
+    input_data = payload.get("input", {})
+    trade_data = payload.get("trade_data", {})
+    analysis = payload.get("analysis", {})
+    
+    summary = analysis.get("summary", {})
+    top_partners = analysis.get("top_partners", [])
+    rows = trade_data.get("rows", [])
+    
+    product = input_data.get("product", "Pharmaceutical")
+    trade_type = input_data.get("trade_type", "export").title()
+    year = input_data.get("year", "2024-25")
+    hs_code = input_data.get("hs_code", "")
+    
+    # 1. Top Trading Partners Bar Chart
+    if top_partners:
+        partner_data = [
+            {"partner": p.get("name", "Unknown")[:20], "value": p.get("current_value", 0)}
+            for p in top_partners[:10]  # Top 10
+        ]
+        viz.append(
+            build_bar_chart(
+                id="top_trading_partners",
+                title=f"Top {trade_type} Partners for {product.title()} ({year})",
+                description=f"Trade values in USD Million for HS Code: {hs_code}",
+                items=partner_data,
+                x_field="partner",
+                y_field="value",
+                orientation="horizontal",
+            )
+        )
+    
+    # 2. Growth Distribution Pie Chart
+    if top_partners:
+        # Categorize partners by growth
+        positive_growth = sum(1 for p in top_partners if p.get("growth", 0) > 0)
+        negative_growth = sum(1 for p in top_partners if p.get("growth", 0) < 0)
+        stable = len(top_partners) - positive_growth - negative_growth
+        
+        growth_dist = [
+            {"label": "Positive Growth", "value": positive_growth},
+            {"label": "Negative Growth", "value": negative_growth},
+            {"label": "Stable", "value": stable},
+        ]
+        viz.append(
+            build_pie_chart(
+                id="growth_distribution",
+                title=f"{trade_type} Growth Distribution by Partner",
+                description="Number of trading partners by growth category",
+                items=growth_dist,
+            )
+        )
+    
+    # 3. Trade Data Table
+    if rows:
+        # Determine columns based on available data
+        columns = []
+        sample_row = rows[0] if rows else {}
+        
+        # Standard columns for EXIM data
+        possible_columns = [
+            {"key": "Country", "label": "Country"},
+            {"key": "Commodity", "label": "Commodity"},
+            {"key": "2023 - 2024", "label": "2023-24 (USD Mn)"},
+            {"key": "2024 - 2025", "label": "2024-25 (USD Mn)"},
+            {"key": "%Share", "label": "Market Share %"},
+            {"key": "%Growth", "label": "YoY Growth %"},
+        ]
+        
+        for col in possible_columns:
+            if col["key"] in sample_row:
+                columns.append(col)
+        
+        # If no standard columns found, use all keys
+        if not columns:
+            columns = [{"key": k, "label": k} for k in sample_row.keys() if k not in ['S.No.', 'HSCode']]
+        
+        viz.append(
+            build_table(
+                id="trade_data_table",
+                title=f"{trade_type} Trade Data - {product.title()}",
+                description=f"Detailed trade statistics for HS Code: {hs_code}",
+                columns=columns,
+                rows=rows[:20],  # Top 20 records
+                page_size=15,
+            )
+        )
+    
+    # 4. Summary Metric Cards
+    if summary:
+        # Total Current Year Value
+        total_current = summary.get("total_current_year", 0)
+        if total_current:
+            viz.append(
+                build_metric_card(
+                    id="total_trade_value",
+                    title=f"Total {trade_type} Value ({year})",
+                    value=round(total_current, 2),
+                    unit="USD Mn",
+                )
+            )
+        
+        # Overall Growth
+        overall_growth = summary.get("overall_growth", 0)
+        if overall_growth is not None:
+            viz.append(
+                build_metric_card(
+                    id="overall_growth",
+                    title="Year-over-Year Growth",
+                    value=round(overall_growth, 2),
+                    unit="%",
+                    delta=overall_growth,
+                )
+            )
+        
+        # Top Partners Count
+        partners_count = summary.get("top_partners_count", 0)
+        if partners_count:
+            viz.append(
+                build_metric_card(
+                    id="partners_count",
+                    title="Trading Partners Analyzed",
+                    value=partners_count,
+                )
+            )
+    
+    # 5. Market Share Distribution (Top 5 vs Others)
+    if top_partners:
+        top_5_share = sum(p.get("share", 0) for p in top_partners[:5])
+        others_share = 100 - top_5_share if top_5_share < 100 else 0
+        
+        share_data = [
+            {"label": p.get("name", "Unknown")[:15], "value": p.get("share", 0)}
+            for p in top_partners[:5]
+        ]
+        if others_share > 0:
+            share_data.append({"label": "Others", "value": round(others_share, 2)})
+        
+        viz.append(
+            build_pie_chart(
+                id="market_share_distribution",
+                title=f"Market Share Distribution - {trade_type}",
+                description=f"Share of total {trade_type.lower()}s by top trading partners",
+                items=share_data,
+            )
+        )
+    
+    return viz

@@ -38,34 +38,37 @@ import {
   Table as TableIcon,
   BarChart3,
   PieChart as PieChartIcon,
+  Download,
+  Maximize2,
+  X,
 } from "lucide-react";
+import {
+  PRIMARY_PALETTE,
+  EXTENDED_PALETTE,
+  COLD_TO_HOT,
+  NAVY_SCALE,
+  BLUE_SCALE,
+  PURPLE_SCALE,
+  CORAL_SCALE,
+  ORANGE_SCALE,
+  getColor,
+  getAlternatingColors,
+  getPaletteForChartType,
+  lightenColor,
+} from "../../lib/colorPalette.js";
 
 // ============================================================================
-// COLOR PALETTE - Vibrant, interesting colors
+// COLOR PALETTE - Professional & Subtle Colors
 // ============================================================================
-export const CHART_COLORS = [
-  "#7c3aed", // Vibrant purple
-  "#06b6d4", // Bright cyan
-  "#14b8a6", // Teal
-  "#f59e0b", // Amber
-  "#ec4899", // Hot pink
-  "#8b5cf6", // Violet
-  "#3b82f6", // Blue
-  "#10b981", // Emerald
-  "#f97316", // Orange
-  "#6366f1", // Indigo
-  "#84cc16", // Lime
-  "#ef4444", // Red
-];
+export const CHART_COLORS = PRIMARY_PALETTE;
 
-export const GRADIENT_COLORS = [
-  { start: "#8b5cf6", end: "#a78bfa" },
-  { start: "#06b6d4", end: "#22d3ee" },
-  { start: "#10b981", end: "#34d399" },
-  { start: "#f59e0b", end: "#fbbf24" },
-  { start: "#ef4444", end: "#f87171" },
-  { start: "#ec4899", end: "#f472b6" },
-];
+export const GRADIENT_COLORS = PRIMARY_PALETTE.map((color, idx) => {
+  const nextColor = PRIMARY_PALETTE[(idx + 1) % PRIMARY_PALETTE.length];
+  return {
+    start: color,
+    end: lightenColor(nextColor, 15),
+  };
+});
 
 // ============================================================================
 // UTILITY FUNCTIONS
@@ -77,7 +80,7 @@ export const GRADIENT_COLORS = [
 export const formatLabel = (key) => {
   if (!key) return "";
 
-  // Special cases
+  // Special cases for uppercase acronyms
   const specialLabels = {
     nct_id: "NCT ID",
     id: "ID",
@@ -88,17 +91,35 @@ export const formatLabel = (key) => {
     usd: "USD",
     eur: "EUR",
     gbp: "GBP",
+    fda: "FDA",
+    eua: "EUA",
   };
 
-  const lower = key.toLowerCase();
+  const lower = String(key).toLowerCase();
   if (specialLabels[lower]) return specialLabels[lower];
 
-  // Convert snake_case and camelCase to Title Case
-  return key
-    .replace(/_/g, " ")
-    .replace(/([A-Z])/g, " $1")
-    .replace(/\b\w/g, (m) => m.toUpperCase())
+  // Handle phase labels specifically for natural ordering
+  if (lower.includes("phase")) {
+    const phaseMatch = String(key).match(/phase[_\s]*(\d+|i+|iv?|one|two|three|four)/i);
+    if (phaseMatch) {
+      const phaseNum = phaseMatch[1];
+      // Convert roman numerals or text to numbers
+      const numMap = { i: 1, ii: 2, iii: 3, iv: 4, one: 1, two: 2, three: 3, four: 4 };
+      const normalizedNum = numMap[phaseNum.toLowerCase()] || phaseNum;
+      return `Phase ${normalizedNum}`;
+    }
+  }
+
+  // Convert snake_case and camelCase to Sentence case (only first word capitalized)
+  let formatted = String(key)
+    .replace(/_/g, " ") // Replace underscores with spaces
+    .replace(/([A-Z])/g, " $1") // Add space before capital letters
     .trim();
+
+  // Capitalize only the first letter, lowercase the rest
+  formatted = formatted.charAt(0).toUpperCase() + formatted.slice(1).toLowerCase();
+
+  return formatted;
 };
 
 /**
@@ -257,7 +278,8 @@ export const BarChartViz = ({ viz }) => {
           >
             <defs>
               {sanitizedData.map((_, idx) => {
-                const color = CHART_COLORS[idx % CHART_COLORS.length];
+                const color = getAlternatingColors(sanitizedData.length, PRIMARY_PALETTE)[idx];
+                const nextColor = lightenColor(color, 12);
                 return (
                   <linearGradient
                     key={`barGrad${idx}`}
@@ -267,13 +289,13 @@ export const BarChartViz = ({ viz }) => {
                     x2={isHorizontal ? "1" : "0"}
                     y2={isHorizontal ? "0" : "1"}
                   >
-                    <stop offset="0%" stopColor={color} stopOpacity={1} />
-                    <stop offset="100%" stopColor={color} stopOpacity={0.65} />
+                    <stop offset="0%" stopColor={color} stopOpacity={0.95} />
+                    <stop offset="100%" stopColor={nextColor} stopOpacity={0.75} />
                   </linearGradient>
                 );
               })}
             </defs>
-            <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" opacity={0.3} />
+            <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" opacity={0.25} />
             {isHorizontal ? (
               <>
                 <XAxis
@@ -325,9 +347,11 @@ export const BarChartViz = ({ viz }) => {
               animationDuration={800}
               animationEasing="ease-out"
             >
-              {sanitizedData.map((entry, idx) => (
-                <Cell key={`cell-${idx}`} fill={`url(#barGrad${idx})`} />
-              ))}
+              {sanitizedData.map((entry, idx) => {
+                const color = getAlternatingColors(sanitizedData.length, PRIMARY_PALETTE)[idx];
+                const nextColor = lightenColor(color, 12);
+                return <Cell key={`cell-${idx}`} fill={`url(#barGrad${idx})`} />;
+              })}
             </Bar>
           </RechartsBarChart>
         </ResponsiveContainer>
@@ -390,10 +414,12 @@ export const PieChartViz = ({ viz }) => {
 
   // Custom legend formatter to show percentages for all slices
   const renderLegendText = (value, entry) => {
-    const percent = ((entry.value / total) * 100).toFixed(1);
+    // Get the actual data value from the entry payload
+    const dataValue = entry?.payload?.value || entry?.value || 0;
+    const percent = total > 0 ? ((dataValue / total) * 100).toFixed(1) : "0.0";
     return (
       <span className="text-sm text-foreground">
-        {value} <span className="text-muted-foreground">({percent}%)</span>
+        {formatLabel(value)} <span className="text-muted-foreground">({percent}%)</span>
       </span>
     );
   };
@@ -404,20 +430,15 @@ export const PieChartViz = ({ viz }) => {
         <ResponsiveContainer width="100%" height="100%">
           <RechartsPieChart>
             <defs>
-              {sanitizedData.map((_, idx) => (
-                <linearGradient key={idx} id={`pieGradient${idx}`} x1="0" y1="0" x2="1" y2="1">
-                  <stop
-                    offset="0%"
-                    stopColor={CHART_COLORS[idx % CHART_COLORS.length]}
-                    stopOpacity={1}
-                  />
-                  <stop
-                    offset="100%"
-                    stopColor={CHART_COLORS[idx % CHART_COLORS.length]}
-                    stopOpacity={0.7}
-                  />
-                </linearGradient>
-              ))}
+              {sanitizedData.map((_, idx) => {
+                const color = getAlternatingColors(sanitizedData.length, EXTENDED_PALETTE)[idx];
+                return (
+                  <linearGradient key={idx} id={`pieGradient${idx}`} x1="0" y1="0" x2="1" y2="1">
+                    <stop offset="0%" stopColor={color} stopOpacity={1} />
+                    <stop offset="100%" stopColor={color} stopOpacity={0.75} />
+                  </linearGradient>
+                );
+              })}
             </defs>
             <Pie
               data={sanitizedData}
@@ -432,14 +453,17 @@ export const PieChartViz = ({ viz }) => {
               animationDuration={1000}
               animationEasing="ease-out"
             >
-              {sanitizedData.map((entry, idx) => (
-                <Cell
-                  key={`cell-${idx}`}
-                  fill={`url(#pieGradient${idx})`}
-                  stroke="var(--background)"
-                  strokeWidth={3}
-                />
-              ))}
+              {sanitizedData.map((entry, idx) => {
+                const color = getAlternatingColors(sanitizedData.length, EXTENDED_PALETTE)[idx];
+                return (
+                  <Cell
+                    key={`cell-${idx}`}
+                    fill={color}
+                    stroke="var(--background)"
+                    strokeWidth={3}
+                  />
+                );
+              })}
             </Pie>
             <Tooltip content={<CustomTooltip />} />
             <Legend
@@ -449,10 +473,11 @@ export const PieChartViz = ({ viz }) => {
               iconSize={12}
               wrapperStyle={{ paddingTop: "20px" }}
               formatter={(value, entry) => {
-                const percent = ((entry.value / total) * 100).toFixed(1);
+                const dataValue = entry?.payload?.value || 0;
+                const percent = total > 0 ? ((dataValue / total) * 100).toFixed(1) : "0.0";
                 return (
                   <span className="text-sm font-medium text-foreground">
-                    {value} <span className="text-muted-foreground">({percent}%)</span>
+                    {formatLabel(value)} <span className="text-muted-foreground">({percent}%)</span>
                   </span>
                 );
               }}
@@ -486,40 +511,44 @@ export const LineChartViz = ({ viz }) => {
 
   return (
     <VizCard title={title} description={description}>
-      <div className="h-[300px] w-full">
+      <div className="h-[400px] w-full">
         <ResponsiveContainer width="100%" height="100%">
           <RechartsLineChart
             data={sanitizedData}
             margin={{ top: 10, right: 30, left: 0, bottom: 20 }}
           >
-            <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" opacity={0.5} />
+            <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" opacity={0.25} />
             <XAxis
               dataKey={xField}
               stroke="var(--muted-foreground)"
               fontSize={12}
               tickLine={false}
-              axisLine={false}
+              axisLine={{ stroke: "var(--border)", strokeWidth: 1 }}
             />
             <YAxis
               stroke="var(--muted-foreground)"
               fontSize={12}
               tickLine={false}
-              axisLine={false}
+              axisLine={{ stroke: "var(--border)", strokeWidth: 1 }}
               tickFormatter={formatValue}
             />
             <Tooltip content={<CustomTooltip />} />
             <Legend />
-            {yFields.map((field, idx) => (
-              <Line
-                key={field}
-                type="monotone"
-                dataKey={field}
-                stroke={CHART_COLORS[idx % CHART_COLORS.length]}
-                strokeWidth={2}
-                dot={{ fill: CHART_COLORS[idx % CHART_COLORS.length], r: 4 }}
-                activeDot={{ r: 6 }}
-              />
-            ))}
+            {yFields.map((field, idx) => {
+              const color = getAlternatingColors(yFields.length, PRIMARY_PALETTE)[idx];
+              return (
+                <Line
+                  key={field}
+                  type="monotone"
+                  dataKey={field}
+                  stroke={color}
+                  strokeWidth={3}
+                  dot={{ fill: color, r: 5, strokeWidth: 2, stroke: "var(--background)" }}
+                  activeDot={{ r: 7, strokeWidth: 2, stroke: color }}
+                  animationDuration={800}
+                />
+              );
+            })}
           </RechartsLineChart>
         </ResponsiveContainer>
       </div>
@@ -555,11 +584,20 @@ export const AreaChartViz = ({ viz }) => {
             margin={{ top: 25, right: 50, left: 60, bottom: 60 }}
           >
             <defs>
-              <linearGradient id="areaGradient" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.4} />
-                <stop offset="50%" stopColor="#8b5cf6" stopOpacity={0.2} />
-                <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0} />
-              </linearGradient>
+              {PRIMARY_PALETTE.map((color, idx) => (
+                <linearGradient
+                  key={`areaGrad${idx}`}
+                  id={`areaGradient${idx}`}
+                  x1="0"
+                  y1="0"
+                  x2="0"
+                  y2="1"
+                >
+                  <stop offset="5%" stopColor={color} stopOpacity={0.35} />
+                  <stop offset="50%" stopColor={color} stopOpacity={0.15} />
+                  <stop offset="95%" stopColor={color} stopOpacity={0.02} />
+                </linearGradient>
+              ))}
             </defs>
             <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" opacity={0.2} />
             <XAxis
@@ -588,12 +626,12 @@ export const AreaChartViz = ({ viz }) => {
             <Area
               type="monotone"
               dataKey={yField}
-              stroke="#8b5cf6"
+              stroke={PRIMARY_PALETTE[0]}
               strokeWidth={3}
-              fill="url(#areaGradient)"
+              fill={`url(#areaGradient0)`}
               animationDuration={1200}
               animationEasing="ease-in-out"
-              dot={{ fill: "#fff", stroke: "#8b5cf6", strokeWidth: 2, r: 5 }}
+              dot={{ fill: "var(--background)", stroke: PRIMARY_PALETTE[0], strokeWidth: 2, r: 5 }}
               activeDot={{ r: 8, strokeWidth: 3 }}
             />
           </RechartsAreaChart>
@@ -611,16 +649,18 @@ export const MetricCardViz = ({ viz, index = 0 }) => {
   const { data = {}, title, description } = viz;
   const { value, delta, unit } = data;
 
-  // Different gradient colors for each metric card to avoid back-to-back same colors
-  const cardGradients = [
-    "from-purple-600 via-purple-500 to-violet-500",
-    "from-cyan-600 via-cyan-500 to-blue-500",
-    "from-emerald-600 via-emerald-500 to-teal-500",
-    "from-amber-600 via-amber-500 to-orange-500",
-    "from-pink-600 via-pink-500 to-rose-500",
-    "from-indigo-600 via-indigo-500 to-blue-600",
+  // Use brighter, more vibrant colors for metric cards
+  const brightColors = [
+    { color: "#3b82f6", light: "#60a5fa" }, // Bright Blue
+    { color: "#8b5cf6", light: "#a78bfa" }, // Bright Purple
+    { color: "#ec4899", light: "#f472b6" }, // Bright Pink
+    { color: "#f59e0b", light: "#fbbf24" }, // Bright Amber
+    { color: "#10b981", light: "#34d399" }, // Bright Emerald
+    { color: "#ef4444", light: "#f87171" }, // Bright Red
+    { color: "#06b6d4", light: "#22d3ee" }, // Bright Cyan
+    { color: "#f97316", light: "#fb923c" }, // Bright Orange
   ];
-  const gradient = cardGradients[index % cardGradients.length];
+  const selectedColor = brightColors[index % brightColors.length];
 
   const [displayValue, setDisplayValue] = useState(0);
 
@@ -659,7 +699,13 @@ export const MetricCardViz = ({ viz, index = 0 }) => {
           className="flex items-baseline gap-2"
         >
           <span
-            className={`text-5xl font-bold bg-gradient-to-br ${gradient} bg-clip-text text-transparent drop-shadow-2xl`}
+            className="text-5xl font-bold"
+            style={{
+              background: `linear-gradient(135deg, ${selectedColor.color}, ${selectedColor.light})`,
+              WebkitBackgroundClip: "text",
+              WebkitTextFillColor: "transparent",
+              backgroundClip: "text",
+            }}
           >
             {formatValue(displayValue)}
           </span>
@@ -699,10 +745,39 @@ export const DataTableViz = ({ viz }) => {
   const { data = {}, title, description, config = {} } = viz;
   const columns = data.columns || [];
   const rows = data.rows || [];
-  const pageSize = config.pageSize || 20; // No limit, show all data with pagination
+  const pageSize = config.pageSize || 20;
 
   const [page, setPage] = useState(0);
   const [sortConfig, setSortConfig] = useState({ key: null, direction: "asc" });
+  const [isExpanded, setIsExpanded] = useState(false);
+
+  // Download CSV function
+  const downloadCSV = () => {
+    const csvContent = [
+      // Header row
+      normalizedColumns.map((col) => `"${col.label}"`).join(","),
+      // Data rows
+      ...sortedRows.map((row) =>
+        normalizedColumns
+          .map((col) => {
+            const value = row[col.key];
+            const displayValue = Array.isArray(value) ? value.join("; ") : (value ?? "");
+            return `"${String(displayValue).replace(/"/g, '""')}"`;
+          })
+          .join(","),
+      ),
+    ].join("\n");
+
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const link = document.createElement("a");
+    const url = URL.createObjectURL(blob);
+    link.setAttribute("href", url);
+    link.setAttribute("download", `${title || "data"}.csv`);
+    link.style.visibility = "hidden";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
 
   const normalizedColumns = useMemo(() => {
     return columns
@@ -729,6 +804,22 @@ export const DataTableViz = ({ viz }) => {
       if (aVal === null || aVal === undefined) return 1;
       if (bVal === null || bVal === undefined) return -1;
 
+      // Special handling for phase labels
+      const aStr = String(aVal).toLowerCase();
+      const bStr = String(bVal).toLowerCase();
+
+      if (aStr.includes("phase") && bStr.includes("phase")) {
+        const aPhaseMatch = aStr.match(/phase[\s_-]*(\d+|i+|iv?)/);
+        const bPhaseMatch = bStr.match(/phase[\s_-]*(\d+|i+|iv?)/);
+
+        if (aPhaseMatch && bPhaseMatch) {
+          const numMap = { i: 1, ii: 2, iii: 3, iv: 4 };
+          const aNum = numMap[aPhaseMatch[1]] || parseInt(aPhaseMatch[1]) || 0;
+          const bNum = numMap[bPhaseMatch[1]] || parseInt(bPhaseMatch[1]) || 0;
+          return sortConfig.direction === "asc" ? aNum - bNum : bNum - aNum;
+        }
+      }
+
       if (typeof aVal === "number" && typeof bVal === "number") {
         return sortConfig.direction === "asc" ? aVal - bVal : bVal - aVal;
       }
@@ -736,7 +827,7 @@ export const DataTableViz = ({ viz }) => {
       const comparison = String(aVal).localeCompare(String(bVal));
       return sortConfig.direction === "asc" ? comparison : -comparison;
     });
-  }, [rows, sortConfig]);
+  }, [rows, sortConfig.key, sortConfig.direction]);
 
   const totalPages = Math.max(1, Math.ceil(sortedRows.length / pageSize));
   const currentRows = sortedRows.slice(page * pageSize, (page + 1) * pageSize);
@@ -757,91 +848,251 @@ export const DataTableViz = ({ viz }) => {
   }
 
   return (
-    <VizCard title={title} description={description} icon={TableIcon} className="overflow-hidden">
-      <div className="overflow-x-auto -mx-5 px-5">
-        <table className="w-full text-sm border-separate border-spacing-0">
-          <thead>
-            <tr className="bg-muted/40">
-              {normalizedColumns.map((col) => (
-                <th
-                  key={col.key}
-                  onClick={() => handleSort(col.key)}
-                  className="text-left p-4 text-muted-foreground font-bold whitespace-nowrap cursor-pointer hover:text-foreground hover:bg-muted/60 transition-colors select-none first:rounded-tl-xl last:rounded-tr-xl border-b-2 border-border"
-                >
-                  <span className="flex items-center gap-2">
-                    {col.label}
-                    {sortConfig.key === col.key && (
-                      <span className="text-sm font-bold text-primary">
-                        {sortConfig.direction === "asc" ? "↑" : "↓"}
-                      </span>
-                    )}
-                  </span>
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            <AnimatePresence mode="popLayout">
-              {currentRows.map((row, rowIdx) => (
-                <motion.tr
-                  key={`${page}-${rowIdx}`}
-                  initial={{ opacity: 0, y: -10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: 10 }}
-                  transition={{ delay: rowIdx * 0.02, duration: 0.2 }}
-                  className="border-b border-border/50 hover:bg-primary/5 transition-all duration-200 hover:shadow-sm"
-                >
-                  {normalizedColumns.map((col) => {
-                    const cellValue = row[col.key];
-                    const displayValue = Array.isArray(cellValue)
-                      ? cellValue.join(", ")
-                      : (cellValue ?? "—");
-
-                    return (
-                      <td
-                        key={col.key}
-                        className="p-4 text-foreground font-medium align-top max-w-[400px] truncate"
-                        title={String(displayValue)}
-                      >
-                        {displayValue}
-                      </td>
-                    );
-                  })}
-                </motion.tr>
-              ))}
-            </AnimatePresence>
-          </tbody>
-        </table>
-      </div>
-
-      {totalPages > 1 && (
-        <div className="flex items-center justify-between mt-6 pt-5 border-t-2 border-border/50">
-          <span className="text-sm font-medium text-muted-foreground">
-            Showing {page * pageSize + 1}–{Math.min((page + 1) * pageSize, rows.length)} of{" "}
-            <span className="text-foreground font-bold">{rows.length}</span>
-          </span>
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => setPage((p) => Math.max(0, p - 1))}
-              disabled={page === 0}
-              className="p-2.5 rounded-xl border-2 border-border hover:bg-primary/10 hover:border-primary disabled:opacity-40 disabled:cursor-not-allowed transition-all duration-200 shadow-sm hover:shadow-md"
-            >
-              <ChevronLeft size={18} />
-            </button>
-            <span className="text-sm font-bold text-foreground px-3 py-1 bg-muted/50 rounded-lg">
-              {page + 1} / {totalPages}
-            </span>
-            <button
-              onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
-              disabled={page >= totalPages - 1}
-              className="p-2.5 rounded-xl border-2 border-border hover:bg-primary/10 hover:border-primary disabled:opacity-40 disabled:cursor-not-allowed transition-all duration-200 shadow-sm hover:shadow-md"
-            >
-              <ChevronRight size={18} />
-            </button>
-          </div>
+    <>
+      <VizCard title={title} description={description} icon={TableIcon} className="overflow-hidden">
+        {/* Action Buttons */}
+        <div className="flex gap-2 mb-4 -mt-2">
+          <motion.button
+            onClick={downloadCSV}
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            className="flex items-center gap-2 px-4 py-2 bg-primary/10 hover:bg-primary/20 text-primary rounded-lg transition-colors text-sm font-medium"
+          >
+            <Download size={16} />
+            Download CSV
+          </motion.button>
+          <motion.button
+            onClick={() => setIsExpanded(true)}
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            className="flex items-center gap-2 px-4 py-2 bg-primary/10 hover:bg-primary/20 text-primary rounded-lg transition-colors text-sm font-medium"
+          >
+            <Maximize2 size={16} />
+            Expand View
+          </motion.button>
         </div>
+
+        <div className="overflow-x-auto -mx-5 px-5 shadow-inner bg-gradient-to-b from-muted/20 to-transparent rounded-xl">
+          <table className="w-full text-sm border-separate border-spacing-0">
+            <thead>
+              <tr className="bg-gradient-to-r from-primary/10 via-primary/5 to-primary/10">
+                {normalizedColumns.map((col) => (
+                  <th
+                    key={col.key}
+                    onClick={() => handleSort(col.key)}
+                    className="text-left p-4 text-foreground font-bold whitespace-nowrap cursor-pointer hover:bg-primary/15 transition-all select-none first:rounded-tl-xl last:rounded-tr-xl border-b-2 border-primary/30 backdrop-blur-sm"
+                  >
+                    <span className="flex items-center gap-2">
+                      {col.label}
+                      {sortConfig.key === col.key && (
+                        <span className="text-base font-bold text-primary">
+                          {sortConfig.direction === "asc" ? "↑" : "↓"}
+                        </span>
+                      )}
+                    </span>
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              <AnimatePresence mode="popLayout">
+                {currentRows.map((row, rowIdx) => (
+                  <motion.tr
+                    key={`${page}-${rowIdx}`}
+                    initial={{ opacity: 0, x: -20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: 20 }}
+                    transition={{ delay: rowIdx * 0.03, duration: 0.3 }}
+                    className={`border-b border-border/30 hover:bg-primary/10 transition-all duration-300 hover:shadow-lg hover:scale-[1.01] ${
+                      rowIdx % 2 === 0 ? "bg-muted/20" : "bg-transparent"
+                    }`}
+                  >
+                    {normalizedColumns.map((col, colIdx) => {
+                      const cellValue = row[col.key];
+                      const displayValue = Array.isArray(cellValue)
+                        ? cellValue.join(", ")
+                        : (cellValue ?? "—");
+
+                    // Special handling for patent numbers - make them clickable links
+                    if (col.key === "patent" && row.patentUrl) {
+                      return (
+                        <td
+                          key={col.key}
+                          className="p-4 text-foreground font-medium align-top max-w-[400px]"
+                        >
+                          <a
+                            href={row.patentUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-primary hover:text-primary/80 underline font-semibold transition-colors"
+                            title={`View ${displayValue} on Google Patents`}
+                          >
+                            {displayValue}
+                          </a>
+                        </td>
+                      );
+                    }
+
+                      return (
+                        <td
+                          key={col.key}
+                          className={`p-4 text-foreground font-medium align-top max-w-[400px] ${
+                            colIdx === 0 ? "font-semibold text-primary" : ""
+                          }`}
+                          title={String(displayValue)}
+                        >
+                          <div className="truncate">{displayValue}</div>
+                        </td>
+                      );
+                    })}
+                  </motion.tr>
+                ))}
+              </AnimatePresence>
+            </tbody>
+          </table>
+        </div>
+
+        {totalPages > 1 && (
+          <div className="flex items-center justify-between mt-6 pt-5 border-t-2 border-border/50">
+            <span className="text-sm font-medium text-muted-foreground">
+              Showing {page * pageSize + 1}–{Math.min((page + 1) * pageSize, rows.length)} of{" "}
+              <span className="text-foreground font-bold">{rows.length}</span>
+            </span>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => setPage((p) => Math.max(0, p - 1))}
+                disabled={page === 0}
+                className="p-2.5 rounded-xl border-2 border-border hover:bg-primary/10 hover:border-primary disabled:opacity-40 disabled:cursor-not-allowed transition-all duration-200 shadow-sm hover:shadow-md"
+              >
+                <ChevronLeft size={18} />
+              </button>
+              <span className="text-sm font-bold text-foreground px-3 py-1 bg-muted/50 rounded-lg">
+                {page + 1} / {totalPages}
+              </span>
+              <button
+                onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
+                disabled={page >= totalPages - 1}
+                className="p-2.5 rounded-xl border-2 border-border hover:bg-primary/10 hover:border-primary disabled:opacity-40 disabled:cursor-not-allowed transition-all duration-200 shadow-sm hover:shadow-md"
+              >
+                <ChevronRight size={18} />
+              </button>
+            </div>
+          </div>
+        )}
+      </VizCard>
+
+      {/* Expanded Modal View */}
+      {isExpanded && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-6"
+          onClick={() => setIsExpanded(false)}
+        >
+          <motion.div
+            initial={{ scale: 0.9, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            exit={{ scale: 0.9, opacity: 0 }}
+            onClick={(e) => e.stopPropagation()}
+            className="bg-background rounded-2xl shadow-2xl max-w-7xl w-full max-h-[90vh] overflow-hidden border-2 border-primary/30"
+          >
+            {/* Modal Header */}
+            <div className="bg-gradient-to-r from-primary/20 via-primary/10 to-primary/20 p-6 border-b-2 border-primary/30 flex items-center justify-between">
+              <div>
+                <h3 className="text-2xl font-bold text-foreground flex items-center gap-3">
+                  <TableIcon className="text-primary" size={28} />
+                  {title || "Data Table"}
+                </h3>
+                {description && <p className="text-sm text-muted-foreground mt-1">{description}</p>}
+              </div>
+              <div className="flex gap-2">
+                <motion.button
+                  onClick={downloadCSV}
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                  className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors font-medium"
+                >
+                  <Download size={18} />
+                  Download
+                </motion.button>
+                <motion.button
+                  onClick={() => setIsExpanded(false)}
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                  className="p-2 bg-destructive/10 hover:bg-destructive/20 text-destructive rounded-lg transition-colors"
+                >
+                  <X size={24} />
+                </motion.button>
+              </div>
+            </div>
+
+            {/* Modal Content - Scrollable Table */}
+            <div className="overflow-auto p-6 max-h-[calc(90vh-180px)]">
+              <table className="w-full text-sm border-separate border-spacing-0">
+                <thead className="sticky top-0 z-10">
+                  <tr className="bg-gradient-to-r from-primary/15 via-primary/10 to-primary/15 backdrop-blur-lg">
+                    {normalizedColumns.map((col) => (
+                      <th
+                        key={col.key}
+                        onClick={() => handleSort(col.key)}
+                        className="text-left p-4 text-foreground font-bold whitespace-nowrap cursor-pointer hover:bg-primary/20 transition-all border-b-2 border-primary/40"
+                      >
+                        <span className="flex items-center gap-2">
+                          {col.label}
+                          {sortConfig.key === col.key && (
+                            <span className="text-lg font-bold text-primary">
+                              {sortConfig.direction === "asc" ? "↑" : "↓"}
+                            </span>
+                          )}
+                        </span>
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {sortedRows.map((row, rowIdx) => (
+                    <tr
+                      key={rowIdx}
+                      className={`border-b border-border/30 hover:bg-primary/10 transition-all ${
+                        rowIdx % 2 === 0 ? "bg-muted/20" : "bg-transparent"
+                      }`}
+                    >
+                      {normalizedColumns.map((col, colIdx) => {
+                        const cellValue = row[col.key];
+                        const displayValue = Array.isArray(cellValue)
+                          ? cellValue.join(", ")
+                          : (cellValue ?? "—");
+
+                        return (
+                          <td
+                            key={col.key}
+                            className={`p-4 text-foreground font-medium align-top ${
+                              colIdx === 0 ? "font-semibold text-primary" : ""
+                            }`}
+                            title={String(displayValue)}
+                          >
+                            {displayValue}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="bg-gradient-to-r from-primary/10 via-primary/5 to-primary/10 p-4 border-t-2 border-primary/30">
+              <p className="text-sm text-muted-foreground text-center">
+                Showing all <span className="font-bold text-foreground">{sortedRows.length}</span>{" "}
+                rows
+              </p>
+            </div>
+          </motion.div>
+        </motion.div>
       )}
-    </VizCard>
+    </>
   );
 };
 

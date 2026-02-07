@@ -6,6 +6,8 @@ Temporary stub: dispatches session to worker agents (no real execution yet)
 from typing import Dict, Any, List
 from app.agents.clinical_agent.clinical_agent import run_clinical_agent
 from app.agents.iqvia_agent.iqvia_agent import run_iqvia_agent
+from app.agents.patent_agent.patent_agent import run_patent_agent
+from app.agents.exim_agent.exim_agent import run_exim_agent
 from app.core.db import DatabaseManager
 import datetime
 from app.core.config import MOCK_DATA_DIR
@@ -91,6 +93,14 @@ def plan_and_run_session(
             print(f"[ORCHESTRATOR] Calling run_iqvia_agent with: {user_query}")
             data = run_iqvia_agent(user_query)
             print(f"[ORCHESTRATOR] IQVIA agent returned: {data}")
+        elif normalized_key == "exim":
+            print(f"[ORCHESTRATOR] Calling run_exim_agent with: {user_query}")
+            data = run_exim_agent(user_query)
+            print(f"[ORCHESTRATOR] EXIM agent returned: {data}")
+        elif normalized_key == "patent":
+            print(f"[ORCHESTRATOR] Calling run_patent_agent with: {user_query}")
+            data = run_patent_agent(user_query)
+            print(f"[ORCHESTRATOR] Patent agent returned: {data}")
         else:
             data = load_agent_data(agent_key)
 

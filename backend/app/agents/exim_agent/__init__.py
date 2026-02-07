@@ -1,15 +1,17 @@
 # Import tools directly - agent is lazily loaded to avoid LLM initialization issues
 from .tools.fetch_exim_data import fetch_exim_data
-from .tools.analyze_trade_volumes import analyze_trade_volumes
-from .tools.extract_sourcing_insights import extract_sourcing_insights
-from .tools.generate_import_dependency_tables import generate_import_dependency_tables
 
 __all__ = [
     "fetch_exim_data",
-    "analyze_trade_volumes",
-    "extract_sourcing_insights",
-    "generate_import_dependency_tables",
+    "run_exim_agent",
+    "get_exim_agent",
 ]
+
+
+def run_exim_agent(user_prompt: str, **kwargs) -> dict:
+    """Run the EXIM agent with LLM parameter extraction."""
+    from .exim_agent import run_exim_agent as _run_exim_agent
+    return _run_exim_agent(user_prompt, **kwargs)
 
 
 # Agent is available but not auto-imported to avoid LLM initialization
