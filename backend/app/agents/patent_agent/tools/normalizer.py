@@ -3,6 +3,14 @@ FTO Score Normalizer
 
 Translates raw FTO scores into a stable 0-100 FTO Risk Index with risk bands.
 
+═══════════════════════════════════════════════════════════════════════════════
+OUTPUT FORMAT CHANGES (Jan 2026):
+- normalizedRiskInternal: 0-100 integer for internal sorting ONLY
+- riskBand per-patent: CLEAR / LOW / MODERATE / HIGH / CRITICAL
+- ftoStatus overall: CLEAR / LOW_RISK / MODERATE_RISK / HIGH_RISK / CRITICAL_RISK
+- Raw numeric scores are NOT exposed to UI (internal only)
+═══════════════════════════════════════════════════════════════════════════════
+
 SCORING NORMALIZATION:
 - Raw scores vary based on number of patents analyzed
 - Normalized index provides consistent 0-100 scale for UI/comparisons
@@ -11,13 +19,14 @@ SCORING NORMALIZATION:
 ALGORITHM:
 - perPatentCap = 12 (matches fto_decision_engine per-patent cap)
 - max_possible_raw = perPatentCap * max(1, num_patents)
-- ftoIndex = round(min(raw_total / max_possible_raw * 100, 100))
+- normalized = round(min(raw_total / max_possible_raw * 100, 100))
 
-BAND MAPPING:
-- 0-20:   LOW       - Minor or no blocking concerns
-- 21-40:  MODERATE  - Some blocking patents, counsel recommended
-- 41-70:  HIGH      - Significant blocking, licensing likely needed
-- 71-100: CRITICAL  - Multiple severe blockers, licensing required
+BAND MAPPING (updated for CLEAR at 0):
+- 0:      CLEAR     - No blocking patents
+- 1-25:   LOW       - Minor blocking concerns
+- 26-50:  MODERATE  - Some blocking patents, counsel recommended
+- 51-75:  HIGH      - Significant blocking, licensing likely needed
+- 76-100: CRITICAL  - Multiple severe blockers, licensing required
 """
 
 from typing import Dict, Any
@@ -25,12 +34,22 @@ from typing import Dict, Any
 # Per-patent score cap (matches fto_decision_engine)
 PER_PATENT_CAP = 12
 
-# Risk band thresholds
+# Risk band thresholds (updated per spec: 0=CLEAR, 1-25=LOW, 26-50=MODERATE, 51-75=HIGH, 76-100=CRITICAL)
 RISK_BANDS = {
-    "LOW": (0, 20),
-    "MODERATE": (21, 40),
-    "HIGH": (41, 70),
-    "CRITICAL": (71, 100),
+    "CLEAR": (0, 0),
+    "LOW": (1, 25),
+    "MODERATE": (26, 50),
+    "HIGH": (51, 75),
+    "CRITICAL": (76, 100),
+}
+
+# Mapping from band to ftoStatus (camelCase for frontend compatibility)
+BAND_TO_FTO_STATUS = {
+    "CLEAR": "CLEAR",
+    "LOW": "LOW_RISK",
+    "MODERATE": "MODERATE_RISK",
+    "HIGH": "HIGH_RISK",
+    "CRITICAL": "CRITICAL_RISK",
 }
 
 
@@ -44,32 +63,32 @@ def normalize_raw_score(raw_total: float, num_patents: int) -> Dict[str, Any]:
     
     Returns:
         {
-            "ftoIndex": int (0-100),
-            "band": str ("LOW", "MODERATE", "HIGH", "CRITICAL"),
-            "details": {
-                "rawScore": float,
-                "numPatents": int,
-                "maxPossibleRaw": float,
-                "perPatentCap": int,
-                "formula": str
-            }
+            "normalizedRiskInternal": int (0-100) - INTERNAL ONLY, not for UI display
+            "band": str ("CLEAR", "LOW", "MODERATE", "HIGH", "CRITICAL"),
+            "ftoStatus": str (e.g. "HIGH_RISK") - for frontend display
+            "details": { ... } - internal audit data
         }
     
+    NOTE: normalizedRiskInternal is for INTERNAL SORTING ONLY.
+    Frontend should NOT display this as a numeric score.
+    Use ftoStatus and band for user-facing risk communication.
+    
     Edge Cases:
-        - num_patents == 0: returns ftoIndex=0, band="LOW"
-        - raw_total == 0: returns ftoIndex=0, band="LOW"
+        - num_patents == 0: returns normalizedRiskInternal=0, band="CLEAR"
+        - raw_total == 0: returns normalizedRiskInternal=0, band="CLEAR"
     """
-    # Edge case: no patents
+    # Edge case: no patents or zero score = CLEAR
     if num_patents <= 0 or raw_total <= 0:
         return {
-            "ftoIndex": 0,
-            "band": "LOW",
+            "normalizedRiskInternal": 0,
+            "band": "CLEAR",
+            "ftoStatus": "CLEAR",
             "details": {
                 "rawScore": raw_total,
                 "numPatents": num_patents,
                 "maxPossibleRaw": 0,
                 "perPatentCap": PER_PATENT_CAP,
-                "formula": "No patents analyzed - default LOW risk"
+                "formula": "No patents analyzed or zero score - CLEAR"
             }
         }
     
@@ -77,36 +96,47 @@ def normalize_raw_score(raw_total: float, num_patents: int) -> Dict[str, Any]:
     max_possible_raw = PER_PATENT_CAP * max(1, num_patents)
     
     # Normalize to 0-100 scale
-    fto_index = round(min((raw_total / max_possible_raw) * 100, 100))
+    normalized = round(min((raw_total / max_possible_raw) * 100, 100))
     
     # Determine risk band
-    band = _determine_band(fto_index)
+    band = _determine_band(normalized)
+    
+    # Map to ftoStatus for frontend
+    fto_status = BAND_TO_FTO_STATUS.get(band, "HIGH_RISK")
     
     return {
-        "ftoIndex": fto_index,
+        "normalizedRiskInternal": normalized,
         "band": band,
+        "ftoStatus": fto_status,
         "details": {
             "rawScore": raw_total,
             "numPatents": num_patents,
             "maxPossibleRaw": max_possible_raw,
             "perPatentCap": PER_PATENT_CAP,
-            "formula": f"round(min({raw_total}/{max_possible_raw}*100, 100)) = {fto_index}"
+            "formula": f"round(min({raw_total}/{max_possible_raw}*100, 100)) = {normalized}"
         }
     }
 
 
-def _determine_band(fto_index: int) -> str:
-    """Map FTO index to risk band."""
-    for band_name, (low, high) in RISK_BANDS.items():
-        if low <= fto_index <= high:
-            return band_name
-    return "CRITICAL"  # Default for anything >= 71
+def _determine_band(normalized: int) -> str:
+    """Map normalized index (0-100) to risk band."""
+    if normalized == 0:
+        return "CLEAR"
+    elif normalized <= 25:
+        return "LOW"
+    elif normalized <= 50:
+        return "MODERATE"
+    elif normalized <= 75:
+        return "HIGH"
+    else:
+        return "CRITICAL"
 
 
 def get_band_description(band: str) -> str:
     """Get human-readable description for a risk band."""
     descriptions = {
-        "LOW": "Minor or no blocking patent concerns identified. Proceed with standard IP monitoring.",
+        "CLEAR": "No blocking patents identified. Proceed with standard IP monitoring.",
+        "LOW": "Minor blocking patent concerns. Proceed with caution and monitor landscape.",
         "MODERATE": "Some blocking patents present. Recommend detailed FTO opinion from patent counsel.",
         "HIGH": "Significant blocking patents identified. Licensing negotiations likely required.",
         "CRITICAL": "Multiple severe blocking patents. Licensing required before proceeding.",
@@ -117,7 +147,8 @@ def get_band_description(band: str) -> str:
 def get_band_color(band: str) -> str:
     """Get UI color for risk band (for visualization)."""
     colors = {
-        "LOW": "#22c55e",      # Green
+        "CLEAR": "#22c55e",    # Green
+        "LOW": "#84cc16",      # Lime green
         "MODERATE": "#f59e0b", # Amber
         "HIGH": "#f97316",     # Orange
         "CRITICAL": "#ef4444", # Red
@@ -125,10 +156,50 @@ def get_band_color(band: str) -> str:
     return colors.get(band, "#6b7280")  # Gray default
 
 
+def normalize_patent_risk(raw_score: float, blocks_use: bool = None, status: str = None) -> Dict[str, Any]:
+    """
+    Normalize a single patent's risk score to 0-100 scale with riskBand.
+    
+    This function is used to assign per-patent riskBand values.
+    
+    Args:
+        raw_score: Raw risk score (0-12 typically)
+        blocks_use: Whether patent blocks use (True/False/None)
+        status: Patent status string
+    
+    Returns:
+        {
+            "normalizedRisk": int (0-100) - internal only
+            "riskBand": str (CLEAR/LOW/MODERATE/HIGH/CRITICAL)
+        }
+    """
+    # Expired or non-blocking patents have CLEAR risk
+    if status == "Expired" or blocks_use is False:
+        return {"normalizedRisk": 0, "riskBand": "CLEAR"}
+    
+    # Uncertain patents get MODERATE default
+    if blocks_use is None or status == "Uncertain":
+        return {"normalizedRisk": 35, "riskBand": "MODERATE"}
+    
+    # For blocking patents, normalize raw score (capped at PER_PATENT_CAP)
+    if raw_score <= 0:
+        return {"normalizedRisk": 50, "riskBand": "HIGH"}  # Blocking but no score = default HIGH
+    
+    # Scale: 0-12 raw → 0-100 normalized
+    normalized = round(min((raw_score / PER_PATENT_CAP) * 100, 100))
+    
+    # Determine band using same logic
+    band = _determine_band(normalized)
+    
+    return {"normalizedRisk": normalized, "riskBand": band}
+
+
 __all__ = [
     "normalize_raw_score",
+    "normalize_patent_risk",
     "get_band_description",
     "get_band_color",
     "PER_PATENT_CAP",
     "RISK_BANDS",
+    "BAND_TO_FTO_STATUS",
 ]

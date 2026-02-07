@@ -2,12 +2,20 @@
 FTO Recommendation Engine
 
 Generates actionable, feasibility-rated recommendations based on FTO analysis.
+Returns TOP 3 most relevant recommendations, each with a single nextStep.
 
 RECOMMENDATION RULES:
 - Composition blocking → License (HIGH), Design-around (LOW)
 - Method near expiry (<5y) → Wait/Monitor (HIGH), File improvements (MEDIUM)
 - Multiple uncertain → Manual review (HIGH)
 - HIGH/CRITICAL band → Always add "Engage patent counsel immediately"
+
+OUTPUT FORMAT:
+Each recommendation contains:
+- action: Short action name (string)
+- reason: One-sentence reason tied to patents/claims (6-12 words)
+- feasibility: "HIGH" | "MEDIUM" | "LOW"
+- nextStep: Single short sentence for next action
 """
 
 from __future__ import annotations
@@ -23,91 +31,59 @@ from typing import Any, Dict, List, Optional
 RECOMMENDATION_TEMPLATES = {
     "license": {
         "action": "License",
-        "rationale_template": "Composition claims block API; licensing provides fastest path to market",
+        "reason_template": "Composition claims block API; licensing fastest path forward",
         "feasibility": "HIGH",
-        "nextSteps": [
-            "Contact patent counsel to assess licensing options",
-            "Prepare Letter of Intent (LOI) for patent holder",
-            "Conduct financial analysis of licensing costs vs. delay costs",
-            "Identify key contact at assignee company"
-        ],
+        "nextStep": "Contact patent counsel to assess licensing options",
+        "priority": 1,  # Higher = more important
+    },
+    "engage_counsel": {
+        "action": "Engage Patent Counsel",
+        "reason_template": "Risk level requires immediate professional legal guidance",
+        "feasibility": "HIGH",
+        "nextStep": "Contact IP/patent counsel within 48 hours",
+        "priority": 2,
     },
     "design_around": {
         "action": "Design-Around",
-        "rationale_template": "Modify formulation or delivery to avoid claim coverage",
+        "reason_template": "Modify formulation or delivery to avoid claim coverage",
         "feasibility": "LOW",
-        "nextSteps": [
-            "Consult R&D on alternative formulation strategies",
-            "Commission freedom-to-operate opinion for proposed modifications",
-            "Evaluate regulatory implications of formulation changes",
-            "Assess timeline and cost impact"
-        ],
+        "nextStep": "Consult R&D on alternative formulation strategies",
+        "priority": 3,
     },
     "wait_monitor": {
         "action": "Wait / Monitor",
-        "rationale_template": "Blocking patents expire within {years} years; delay may be cost-effective",
+        "reason_template": "Blocking patents expire soon; delay may be cost-effective",
         "feasibility": "HIGH",
-        "nextSteps": [
-            "Monitor patent status and any continuation filings",
-            "Track competitor activity for same indication",
-            "Prepare launch plan for post-expiry date",
-            "Consider Paragraph IV filing if generics pathway applies"
-        ],
+        "nextStep": "Monitor patent status and continuation filings",
+        "priority": 4,
     },
     "indication_shift": {
         "action": "Indication Shift",
-        "rationale_template": "Consider alternative therapeutic indication not covered by method claims",
+        "reason_template": "Alternative indication may avoid method claim coverage",
         "feasibility": "MEDIUM",
-        "nextSteps": [
-            "Review clinical data for off-label uses",
-            "Assess market potential for alternative indications",
-            "Consult regulatory affairs on indication change implications",
-            "Commission IP search for alternative indication coverage"
-        ],
+        "nextStep": "Review clinical data for off-label uses",
+        "priority": 5,
     },
     "file_improvements": {
         "action": "File Improvement Patents",
-        "rationale_template": "Secure IP position for formulation or process improvements",
+        "reason_template": "Secure IP position for formulation improvements",
         "feasibility": "MEDIUM",
-        "nextSteps": [
-            "Identify patentable formulation or delivery improvements",
-            "Conduct prior art search for improvement concepts",
-            "Prepare provisional patent applications",
-            "Develop IP strategy for improvement portfolio"
-        ],
+        "nextStep": "Identify patentable formulation or delivery improvements",
+        "priority": 6,
     },
     "manual_review": {
         "action": "Manual Review Required",
-        "rationale_template": "Multiple patents with uncertain status require expert analysis",
+        "reason_template": "Multiple patents with uncertain status need expert analysis",
         "feasibility": "HIGH",
-        "nextSteps": [
-            "Engage patent counsel for detailed claim analysis",
-            "Request full patent documents for uncertain patents",
-            "Commission formal freedom-to-operate opinion",
-            "Prepare claim charts for key patents"
-        ],
-    },
-    "engage_counsel": {
-        "action": "Engage Patent Counsel Immediately",
-        "rationale_template": "Risk level requires immediate professional legal guidance",
-        "feasibility": "HIGH",
-        "nextSteps": [
-            "Contact IP/patent counsel within 48 hours",
-            "Prepare summary of FTO analysis for counsel review",
-            "Request preliminary opinion on licensing vs. litigation risk",
-            "Schedule follow-up meeting to discuss options"
-        ],
+        "nextStep": "Engage patent counsel for detailed claim analysis",
+        "priority": 7,
     },
     "proceed_clear": {
         "action": "Proceed with Standard Monitoring",
-        "rationale_template": "No significant blocking patents identified; maintain IP vigilance",
+        "reason_template": "No significant blocking patents; maintain IP vigilance",
         "feasibility": "HIGH",
-        "nextSteps": [
-            "Set up patent monitoring alerts for drug and indication",
-            "Review patent landscape quarterly",
-            "Document FTO analysis for regulatory files",
-            "Monitor competitor patent filings"
-        ],
+        "nextStep": "Set up patent monitoring alerts for drug and indication",
+        "priority": 8,
     },
 }
 
@@ -124,25 +100,25 @@ def recommend_actions(
     blocking_patents: List[Dict[str, Any]] = None,
 ) -> List[Dict[str, Any]]:
     """
-    Generate actionable recommendations based on FTO analysis.
+    Generate TOP 3 actionable recommendations based on FTO analysis.
     
     Args:
         verifications: All patent verifications from analysis
         fto_index: Normalized FTO risk index (0-100)
-        band: Risk band ("LOW", "MODERATE", "HIGH", "CRITICAL")
+        band: Risk band ("CLEAR", "LOW", "MODERATE", "HIGH", "CRITICAL")
         blocking_patents: List of blocking patents with details
     
     Returns:
-        List of recommendation dicts, each containing:
+        List of 3 recommendation dicts (sorted by priority), each containing:
         - action: Short action name
-        - rationale: One-sentence reason tied to patents/claims
+        - reason: One-sentence reason tied to patents/claims (6-12 words)
         - feasibility: HIGH / MEDIUM / LOW
-        - nextSteps: Array of 2-4 practical next steps
+        - nextStep: Single short sentence for next action
     """
     if blocking_patents is None:
         blocking_patents = []
     
-    recommendations = []
+    candidates = []  # List of (priority, recommendation_dict)
     
     # Analyze patent characteristics
     composition_blockers = [p for p in blocking_patents if p.get("claimType") == "COMPOSITION"]
@@ -157,110 +133,93 @@ def recommend_actions(
     near_expiry_blockers = _get_near_expiry_patents(blocking_patents, years_threshold=5)
     
     # =========================================================================
-    # RULE 1: LOW risk band - proceed with monitoring + additional actions
+    # RULE 1: CLEAR/LOW risk band - proceed with monitoring
     # =========================================================================
-    if band == "LOW":
-        recommendations.append(_build_recommendation("proceed_clear"))
-        # Don't return early - add more recommendations below
+    if band in ("CLEAR", "LOW"):
+        rec = _build_recommendation("proceed_clear")
+        candidates.append((RECOMMENDATION_TEMPLATES["proceed_clear"]["priority"], rec))
     
     # =========================================================================
-    # RULE 2: COMPOSITION blocking patents → License + Design-around
+    # RULE 2: HIGH/CRITICAL band → Always add "Engage patent counsel"
+    # =========================================================================
+    if band in ("HIGH", "CRITICAL"):
+        rec = _build_recommendation("engage_counsel")
+        rec["reason"] = f"FTO Risk Index {fto_index}/100 ({band}) requires legal guidance"
+        candidates.append((RECOMMENDATION_TEMPLATES["engage_counsel"]["priority"], rec))
+    
+    # =========================================================================
+    # RULE 3: COMPOSITION blocking patents → License
     # =========================================================================
     if composition_blockers:
-        # License recommendation (HIGH feasibility)
-        license_rec = _build_recommendation("license")
-        license_rec["rationale"] = f"{len(composition_blockers)} composition patent(s) cover the API; licensing provides fastest path to market"
-        recommendations.append(license_rec)
+        rec = _build_recommendation("license")
+        rec["reason"] = f"{len(composition_blockers)} composition patent(s) block API; licensing required"
+        candidates.append((RECOMMENDATION_TEMPLATES["license"]["priority"], rec))
         
-        # Design-around (LOW feasibility for composition claims)
+        # Design-around is LOW feasibility for composition
         design_rec = _build_recommendation("design_around")
-        design_rec["rationale"] = "Composition claims typically difficult to design around; modification unlikely to avoid coverage"
+        design_rec["reason"] = "Composition claims difficult to design around"
         design_rec["feasibility"] = "LOW"
-        recommendations.append(design_rec)
+        candidates.append((RECOMMENDATION_TEMPLATES["design_around"]["priority"], design_rec))
     
     # =========================================================================
-    # RULE 3: METHOD_OF_TREATMENT near expiry → Wait/Monitor + File improvements
+    # RULE 4: METHOD_OF_TREATMENT near expiry → Wait/Monitor
     # =========================================================================
     method_near_expiry = [p for p in near_expiry_blockers if p.get("claimType") == "METHOD_OF_TREATMENT"]
     if method_near_expiry:
         years = _min_years_to_expiry(method_near_expiry)
-        
-        # Wait/Monitor (HIGH feasibility)
-        wait_rec = _build_recommendation("wait_monitor")
-        wait_rec["rationale"] = f"Method-of-treatment patents expire within {years:.1f} years; waiting may be cost-effective"
-        recommendations.append(wait_rec)
-        
-        # File improvement patents (MEDIUM feasibility)
-        improve_rec = _build_recommendation("file_improvements")
-        improve_rec["rationale"] = "Secure IP position for formulation improvements before blocking patents expire"
-        recommendations.append(improve_rec)
+        rec = _build_recommendation("wait_monitor")
+        rec["reason"] = f"Method patents expire in {years:.1f} years; delay cost-effective"
+        candidates.append((RECOMMENDATION_TEMPLATES["wait_monitor"]["priority"], rec))
     
     # =========================================================================
-    # RULE 4: FORMULATION blockers without composition → Design-around viable
+    # RULE 5: FORMULATION blockers without composition → Design-around viable
     # =========================================================================
     if formulation_blockers and not composition_blockers:
-        design_rec = _build_recommendation("design_around")
-        design_rec["rationale"] = "Formulation claims may be designable around with alternative delivery mechanisms"
-        design_rec["feasibility"] = "MEDIUM"
-        recommendations.append(design_rec)
+        rec = _build_recommendation("design_around")
+        rec["reason"] = "Formulation claims may be designable around"
+        rec["feasibility"] = "MEDIUM"
+        candidates.append((RECOMMENDATION_TEMPLATES["design_around"]["priority"], rec))
     
     # =========================================================================
-    # RULE 5: Multiple uncertain patents → Manual review required
+    # RULE 6: Multiple uncertain patents → Manual review required
     # =========================================================================
     if uncertain_count >= 2 or error_count >= 1:
-        review_rec = _build_recommendation("manual_review")
-        review_rec["rationale"] = f"{uncertain_count} patent(s) with uncertain status and {error_count} analysis error(s) require expert review"
-        recommendations.append(review_rec)
+        rec = _build_recommendation("manual_review")
+        rec["reason"] = f"{uncertain_count} uncertain patents require expert review"
+        candidates.append((RECOMMENDATION_TEMPLATES["manual_review"]["priority"], rec))
     
     # =========================================================================
-    # RULE 6: HIGH/CRITICAL band → Always add "Engage patent counsel"
-    # =========================================================================
-    if band in ("HIGH", "CRITICAL"):
-        # Add as first recommendation
-        counsel_rec = _build_recommendation("engage_counsel")
-        counsel_rec["rationale"] = f"FTO Risk Index {fto_index}/100 ({band}) requires immediate professional legal guidance"
-        recommendations.insert(0, counsel_rec)
-    
-    # =========================================================================
-    # RULE 7: Indication shift option for method claims
+    # RULE 7: Indication shift option for method claims (no composition)
     # =========================================================================
     if method_blockers and not composition_blockers:
-        shift_rec = _build_recommendation("indication_shift")
-        shift_rec["rationale"] = "Method-of-treatment claims are indication-specific; alternative indication may avoid coverage"
-        recommendations.append(shift_rec)
+        rec = _build_recommendation("indication_shift")
+        rec["reason"] = "Method claims indication-specific; alternative may avoid"
+        candidates.append((RECOMMENDATION_TEMPLATES["indication_shift"]["priority"], rec))
     
-    # Deduplicate by action name
-    seen_actions = set()
-    unique_recommendations = []
-    for rec in recommendations:
-        if rec["action"] not in seen_actions:
-            seen_actions.add(rec["action"])
-            unique_recommendations.append(rec)
+    # =========================================================================
+    # RULE 8: MODERATE band - add file improvements
+    # =========================================================================
+    if band == "MODERATE" and blocking_patents:
+        rec = _build_recommendation("file_improvements")
+        rec["reason"] = "Secure IP position for formulation improvements"
+        candidates.append((RECOMMENDATION_TEMPLATES["file_improvements"]["priority"], rec))
     
-    # Ensure at least 5 recommendations by adding context-aware fallback actions
-    fallback_sequence = [
-        ("file_improvements", "Secure competitive advantage by patenting formulation or delivery improvements around existing IP"),
-        ("indication_shift", "Explore alternative therapeutic applications that may not be covered by existing claims"),
-        ("wait_monitor", "Monitor patent landscape for expiries, abandonments, or invalidation opportunities"),
-        ("proceed_clear", "Risk level permits proceeding with development while maintaining IP vigilance"),
-        ("manual_review", "Complex patent landscape warrants detailed expert analysis of claim scope and validity"),
-        ("design_around", "Evaluate alternative formulations or delivery mechanisms to avoid claim coverage"),
-    ]
+    # Deduplicate by action name, keeping highest priority (lowest number)
+    seen_actions = {}
+    for priority, rec in candidates:
+        action = rec["action"]
+        if action not in seen_actions or priority < seen_actions[action][0]:
+            seen_actions[action] = (priority, rec)
     
-    for template_key, rationale in fallback_sequence:
-        if len(unique_recommendations) >= 5:
-            break
-        
-        template = RECOMMENDATION_TEMPLATES.get(template_key, {})
-        action_name = template.get("action", "Unknown")
-        
-        if action_name not in seen_actions:
-            rec = _build_recommendation(template_key)
-            rec["rationale"] = rationale
-            unique_recommendations.append(rec)
-            seen_actions.add(action_name)
+    # Sort by priority (lower number = higher priority) and take top 3
+    sorted_recs = sorted(seen_actions.values(), key=lambda x: x[0])
+    top_3 = [rec for _, rec in sorted_recs[:3]]
     
-    return unique_recommendations
+    # Ensure we have at least 1 recommendation (fallback)
+    if not top_3:
+        top_3.append(_build_recommendation("proceed_clear"))
+    
+    return top_3
 
 
 # ============================================================================
@@ -269,13 +228,17 @@ def recommend_actions(
 
 
 def _build_recommendation(template_key: str) -> Dict[str, Any]:
-    """Build a recommendation dict from a template."""
+    """Build a recommendation dict from a template.
+    
+    Returns:
+        Dict with: action, reason, feasibility, nextStep
+    """
     template = RECOMMENDATION_TEMPLATES.get(template_key, {})
     return {
         "action": template.get("action", "Unknown Action"),
-        "rationale": template.get("rationale_template", ""),
+        "reason": template.get("reason_template", ""),
         "feasibility": template.get("feasibility", "MEDIUM"),
-        "nextSteps": template.get("nextSteps", [])[:4],  # Max 4 steps
+        "nextStep": template.get("nextStep", "Consult with IP counsel"),
     }
 
 
@@ -283,7 +246,7 @@ def _get_near_expiry_patents(patents: List[Dict[str, Any]], years_threshold: flo
     """Get patents expiring within threshold years."""
     near_expiry = []
     for p in patents:
-        expiry = p.get("expectedExpiry")
+        expiry = p.get("expectedExpiry") or p.get("expiry")
         if expiry:
             years = _years_until_expiry(expiry)
             if years is not None and years < years_threshold:
@@ -305,7 +268,7 @@ def _min_years_to_expiry(patents: List[Dict[str, Any]]) -> float:
     """Get minimum years to expiry among patents."""
     min_years = float("inf")
     for p in patents:
-        expiry = p.get("expectedExpiry")
+        expiry = p.get("expectedExpiry") or p.get("expiry")
         if expiry:
             years = _years_until_expiry(expiry)
             if years is not None and years < min_years:

@@ -12,17 +12,25 @@ SCORING PHILOSOPHY:
 - All decisions are rule-based and deterministic (no LLM-based scoring)
 - Conservative approach: when in doubt, flag for manual review
 - Per-patent score cap (12) prevents numeric explosion, NOT legal severity
-- A single COMPOSITION claim can require licensing even at MODERATE_RISK status
+- A single COMPOSITION claim can require licensing even at MODERATE status
 
 RISK BAND SEMANTICS (0-100 Normalized Index):
-- LOW (0-20):       No significant blocking patents
-- MODERATE (21-40): Some blocking patents, counsel recommended
-- HIGH (41-70):     Significant blocking, licensing likely needed
-- CRITICAL (71-100): Multiple severe blockers, licensing required
+- CLEAR (0):       No blocking patents identified
+- LOW (1-25):      Minor concerns, proceed with monitoring
+- MODERATE (26-50): Some blocking patents, counsel recommended
+- HIGH (51-75):    Significant blocking, licensing likely needed
+- CRITICAL (76-100): Multiple severe blockers, licensing required
+
+FTO STATUS MAPPING:
+- CLEAR   → "CLEAR"
+- LOW     → "NEEDS_MONITORING"
+- MODERATE → "AT_RISK"
+- HIGH    → "BLOCKED"
+- CRITICAL → "BLOCKED"
 
 IMPORTANT: Score capping does NOT diminish legal risk!
-- A COMPOSITION patent with continuation scores 16 → capped at 12 → MODERATE_RISK
-- But MODERATE_RISK + COMPOSITION still means "licensing may be required"
+- A COMPOSITION patent with continuation scores 16 → capped at 12 → MODERATE
+- But MODERATE + COMPOSITION still means "licensing may be required"
 - Recommended actions reflect claim severity, not just numeric score
 
 UNCERTAINTY HANDLING:
@@ -50,8 +58,8 @@ from typing import Dict, Any, List
 from datetime import datetime
 
 # Import new modules for enhanced output
-from .normalizer import normalize_raw_score, get_band_description
-from .formatter import format_patent_entry, build_visualization_payload, build_summary_texts
+from .normalizer import normalize_raw_score, get_band_description, BAND_TO_FTO_STATUS
+from .formatter import format_patent_entry, format_patent_entry_expanded, build_visualization_payload, build_summary_texts
 from .recommender import recommend_actions
 from .llm_prompts import (
     build_executive_prompt,
@@ -83,12 +91,13 @@ CONFIDENCE_WEIGHTS = {
     "LOW": 0,
 }
 
-# Risk bands
+# Risk bands (using new thresholds)
 RISK_BANDS = {
     "CLEAR": (0, 0),
-    "LOW_RISK": (1, 5),
-    "MODERATE_RISK": (6, 12),
-    "HIGH_RISK": (13, float("inf")),
+    "LOW": (1, 25),
+    "MODERATE": (26, 50),
+    "HIGH": (51, 75),
+    "CRITICAL": (76, 100),
 }
 
 # LLM initialized lazily to avoid import-time errors
@@ -263,19 +272,19 @@ def _determine_overall_confidence(uncertain_patents: List[Dict], blocking_patent
         return "HIGH"
 
 
-def _determine_fto_status(total_score: int) -> str:
-    """Map total score to FTO status."""
-    for status, (low, high) in RISK_BANDS.items():
-        if low <= total_score <= high:
-            return status
-    return "HIGH_RISK"
+def _determine_fto_status(band: str) -> str:
+    """Map risk band to FTO status using canonical mapping."""
+    return BAND_TO_FTO_STATUS.get(band, "AT_RISK")
 
 
 def _get_recommended_actions(fto_status: str, blocking_patents: List[Dict]) -> List[str]:
     """Generate recommended actions based on FTO status and blocking patents.
     
+    DEPRECATED: Use recommend_actions() from recommender.py instead.
+    This function is kept for backwards compatibility only.
+    
     IMPORTANT: Actions reflect both FTO status AND claim severity.
-    A COMPOSITION claim at MODERATE_RISK may still require licensing.
+    A COMPOSITION claim at MODERATE status may still require licensing.
     """
     actions = []
     
@@ -285,16 +294,16 @@ def _get_recommended_actions(fto_status: str, blocking_patents: List[Dict]) -> L
     if fto_status == "CLEAR":
         actions.append("Proceed with development - no blocking patents identified")
     
-    elif fto_status == "LOW_RISK":
+    elif fto_status == "NEEDS_MONITORING":
         actions.append("Proceed with caution - monitor identified patents")
         actions.append("Consider freedom-to-operate opinion from patent counsel")
     
-    elif fto_status == "MODERATE_RISK":
+    elif fto_status == "AT_RISK":
         actions.append("Seek detailed FTO opinion from patent counsel")
         actions.append("Evaluate licensing opportunities")
         actions.append("Consider design-around strategies")
         
-        # COMPOSITION claims may require licensing even at MODERATE_RISK
+        # COMPOSITION claims may require licensing even at AT_RISK
         if has_composition:
             actions.append("WARNING: Composition claims present - design-around may not be feasible")
         
@@ -305,7 +314,7 @@ def _get_recommended_actions(fto_status: str, blocking_patents: List[Dict]) -> L
                 actions.append(f"Wait for {p.get('patent')} expiry ({p.get('expectedExpiry')[:10] if p.get('expectedExpiry') else 'unknown'})")
                 break
     
-    elif fto_status == "HIGH_RISK":
+    elif fto_status == "BLOCKED":
         actions.append("Licensing required before proceeding")
         actions.append("Evaluate alternative indications or formulations")
         actions.append("Consider design-around or indication shift")
@@ -366,7 +375,8 @@ def fto_decision_engine(
     patent_verifications: List[Dict[str, Any]],
     drug: str,
     disease: str,
-    jurisdiction: str = "US"
+    jurisdiction: str = "US",
+    total_found_in_api: int = None,
 ) -> Dict[str, Any]:
     """
     Generate FTO decision based on verified patent portfolio.
@@ -380,6 +390,7 @@ def fto_decision_engine(
         drug: Target drug name
         disease: Target disease/indication
         jurisdiction: FTO jurisdiction scope (default "US")
+        total_found_in_api: Total patents returned by API (for display purposes)
     
     Returns:
         Enhanced FTO decision with:
@@ -392,6 +403,8 @@ def fto_decision_engine(
         - visualizationPayload: Frontend-ready chart data
     """
     num_patents = len(patent_verifications) if patent_verifications else 0
+    # Use total_found_in_api for display, num_patents for scoring
+    patents_found_display = total_found_in_api if total_found_in_api is not None else num_patents
     
     # Handle empty input
     if not patent_verifications:
@@ -400,29 +413,33 @@ def fto_decision_engine(
             "drug": drug,
             "disease": disease,
             "jurisdiction": jurisdiction,
-            "ftoRiskIndex": 0,
-            "ftoRiskBand": "LOW",
-            "rawScore": 0,
-            "ftoStatus": "CLEAR",  # Legacy field for backwards compatibility
-            "totalScore": 0,       # Legacy field
+            # New canonical fields
+            "ftoStatus": "CLEAR",
+            "ftoDate": None,
+            "normalizedRiskInternal": 0,
+            "patentsFound": total_found_in_api if total_found_in_api is not None else 0,
+            "blockingPatentsSummary": {
+                "count": 0,
+                "claimTypeCounts": {},
+            },
             "blockingPatents": [],
-            "nonBlockingPatents": [],
-            "expiredPatents": [],
-            "uncertainPatents": [],
-            "earliestFreedomDate": None,
             "recommendedActions": [{
                 "action": "Proceed with Standard Monitoring",
-                "rationale": "No patents analyzed - verify discovery results",
+                "reason": "No patents analyzed - verify discovery results",
                 "feasibility": "HIGH",
-                "nextSteps": ["Verify patent search parameters", "Consider expanding search terms"]
+                "nextStep": "Verify patent search parameters"
             }],
-            "scoringNotes": [],
             "summary": {
                 "executive": f"No patents found for {drug} in {disease}. FTO appears clear pending manual verification.",
                 "business": f"No blocking patents identified for {drug} in {disease}. Proceed with standard IP monitoring.",
                 "legal": "No patents analyzed. Recommend manual verification of patent landscape."
             },
             "visualizationPayload": build_visualization_payload([], normalized, [], [], [], []),
+            "expandedResults": {
+                "nonBlockingPatents": [],
+                "expiredPatents": [],
+                "uncertainPatents": [],
+            },
             "confidence": "LOW",
             "analysisDate": datetime.now().isoformat(),
             "disclaimer": "This is an automated assessment. Consult qualified patent counsel for legal advice.",
@@ -479,20 +496,14 @@ def fto_decision_engine(
     
     # Step 3: Normalize score to 0-100 index
     normalized = normalize_raw_score(total_score, num_patents)
-    fto_index = normalized["ftoIndex"]
+    normalized_risk_internal = normalized["normalizedRiskInternal"]
     fto_band = normalized["band"]
     
-    # Legacy status mapping (for backwards compatibility)
-    legacy_status_map = {
-        "LOW": "CLEAR" if total_score == 0 else "LOW_RISK",
-        "MODERATE": "MODERATE_RISK",
-        "HIGH": "HIGH_RISK",
-        "CRITICAL": "HIGH_RISK",
-    }
-    fto_status = legacy_status_map.get(fto_band, "HIGH_RISK")
+    # Map band to FTO status using canonical mapping
+    fto_status = BAND_TO_FTO_STATUS.get(fto_band, "AT_RISK")
     
-    # Step 4: Find earliest freedom date
-    earliest_freedom = None
+    # Step 4: Find FTO date (earliest date when freedom is achieved)
+    fto_date = None
     if blocking_patents:
         expiry_dates = []
         for p in blocking_patents:
@@ -505,12 +516,12 @@ def fto_decision_engine(
         
         if expiry_dates:
             latest_expiry = max(expiry_dates)
-            earliest_freedom = latest_expiry.strftime("%Y-%m-%d")
+            fto_date = latest_expiry.strftime("%Y-%m-%d")
     
-    # Step 5: Generate actionable recommendations using new recommender
+    # Step 5: Generate actionable recommendations using new recommender (top 3 only)
     recommended_actions = recommend_actions(
         verifications=patent_verifications,
-        fto_index=fto_index,
+        fto_index=normalized_risk_internal,
         band=fto_band,
         blocking_patents=scored_blocking,
     )
@@ -519,10 +530,12 @@ def fto_decision_engine(
     confidence = _determine_overall_confidence(uncertain_patents, blocking_patents)
     
     # Step 7: Format patent entries for display
+    # Blocking patents: use compact format (no evidence, no internal scores)
     formatted_blocking = [format_patent_entry(p) for p in scored_blocking]
-    formatted_non_blocking = [format_patent_entry(p) for p in non_blocking_patents]
-    formatted_expired = [format_patent_entry(p) for p in expired_patents]
-    formatted_uncertain = [format_patent_entry(p) for p in uncertain_patents]
+    # Non-blocking/expired/uncertain: use expanded format for expandedResults
+    formatted_non_blocking = [format_patent_entry_expanded(p) for p in non_blocking_patents]
+    formatted_expired = [format_patent_entry_expanded(p) for p in expired_patents]
+    formatted_uncertain = [format_patent_entry_expanded(p) for p in uncertain_patents]
     
     # Step 8: Build multi-layer summaries
     summary = build_summary_texts(
@@ -531,11 +544,11 @@ def fto_decision_engine(
         drug=drug,
         disease=disease,
         blocking_patents=scored_blocking,
-        earliest_freedom_date=earliest_freedom,
+        earliest_freedom_date=fto_date,
         recommended_actions=recommended_actions,
     )
     
-    # Step 9: Build visualization payload
+    # Step 9: Build visualization payload (includes pieData and claimTypeCounts)
     viz_payload = build_visualization_payload(
         verifications=patent_verifications,
         normalized_result=normalized,
@@ -545,7 +558,18 @@ def fto_decision_engine(
         uncertain_patents=uncertain_patents,
     )
     
-    # Step 10: Add continuation warnings
+    # Step 10: Build blockingPatentsSummary with claimTypeCounts
+    claim_type_counts = {}
+    for p in scored_blocking:
+        ct = p.get("claimType", "OTHER")
+        claim_type_counts[ct] = claim_type_counts.get(ct, 0) + 1
+    
+    blocking_patents_summary = {
+        "count": len(formatted_blocking),
+        "claimTypeCounts": claim_type_counts,
+    }
+    
+    # Step 11: Add continuation warnings
     continuation_warnings = []
     for p in blocking_patents:
         if p.get("hasContinuations"):
@@ -554,31 +578,42 @@ def fto_decision_engine(
             )
     
     return {
-        # Core decision fields
+        # Core decision fields (canonical schema)
         "drug": drug,
         "disease": disease,
         "jurisdiction": jurisdiction,
-        "ftoRiskIndex": fto_index,
-        "ftoRiskBand": fto_band,
         "ftoStatus": fto_status,
+        "ftoDate": fto_date,  # Renamed from earliestFreedomDate
+        "normalizedRiskInternal": normalized_risk_internal,  # Internal use only, not for UI
+        "patentsFound": patents_found_display,  # Total from API, not analyzed count
         
-        # Formatted patent lists (display-ready, no internal scores)
+        # Blocking patents summary with claimTypeCounts
+        "blockingPatentsSummary": blocking_patents_summary,
+        
+        # Formatted blocking patents (display-ready, no evidence/internal scores)
         "blockingPatents": formatted_blocking,
-        "nonBlockingPatents": formatted_non_blocking,
-        "expiredPatents": formatted_expired,
-        "uncertainPatents": formatted_uncertain,
         
-        # Decision data
-        "earliestFreedomDate": earliest_freedom,
+        # Recommendations (top 3 only, with nextStep singular)
         "recommendedActions": recommended_actions,
+        
+        # Confidence in overall assessment
         "confidence": confidence,
-        "continuationWarnings": continuation_warnings if continuation_warnings else None,
         
         # Multi-layer summaries
         "summary": summary,
         
-        # Visualization data
+        # Visualization data (includes pieData with integer counts)
         "visualizationPayload": viz_payload,
+        
+        # Expanded results for drill-down (non-blocking patents go here)
+        "expandedResults": {
+            "nonBlockingPatents": formatted_non_blocking,
+            "expiredPatents": formatted_expired,
+            "uncertainPatents": formatted_uncertain,
+        },
+        
+        # Warnings
+        "continuationWarnings": continuation_warnings if continuation_warnings else None,
         
         # Metadata
         "analysisDate": datetime.now().isoformat(),

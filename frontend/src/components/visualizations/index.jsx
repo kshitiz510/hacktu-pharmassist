@@ -110,10 +110,43 @@ export const formatLabel = (key) => {
     }
   }
 
+  // Known concatenated phrases in pharmaceutical data (status fields, etc.)
+  const knownPhrases = {
+    activenotrecruiting: "Active, not recruiting",
+    notyetrecruiting: "Not yet recruiting",
+    enrollingbyinvitation: "Enrolling by invitation",
+    activelycompleted: "Actively completed",
+    temporarilynotavailable: "Temporarily not available",
+    notavailable: "Not available",
+    approvedformarketing: "Approved for marketing",
+    notyetapproved: "Not yet approved",
+    notyetactive: "Not yet active",
+    withheldunknown: "Withheld / unknown",
+    notapplicable: "Not applicable",
+  };
+
+  const lowerKey = String(key).toLowerCase().replace(/[\s_-]/g, "");
+  if (knownPhrases[lowerKey]) return knownPhrases[lowerKey];
+
+  let raw = String(key);
+
+  // If the string is ALL CAPS (or nearly), just title-case it instead of
+  // inserting a space before every letter.
+  const upperRatio = (raw.match(/[A-Z]/g) || []).length / raw.replace(/[^a-zA-Z]/g, "").length;
+  if (upperRatio > 0.6) {
+    // ALL-CAPS input like "COMPLETED" or "NOT_YET_RECRUITING"
+    raw = raw
+      .replace(/_/g, " ")
+      .toLowerCase()
+      .replace(/\b\w/g, (c) => c.toUpperCase()); // Title Case each word
+    // Return as-is (already nicely formatted)
+    return raw;
+  }
+
   // Convert snake_case and camelCase to Sentence case (only first word capitalized)
-  let formatted = String(key)
+  let formatted = raw
     .replace(/_/g, " ") // Replace underscores with spaces
-    .replace(/([A-Z])/g, " $1") // Add space before capital letters
+    .replace(/([A-Z])/g, " $1") // Add space before capital letters (camelCase)
     .trim();
 
   // Capitalize only the first letter, lowercase the rest
@@ -183,35 +216,42 @@ export const sanitizeData = (data, fields = []) => {
 // BASE CARD COMPONENT - Enhanced with vibrant styling
 // ============================================================================
 
-const VizCard = ({ title, description, icon: Icon, children, className = "" }) => (
-  <motion.div
-    initial={{ opacity: 0, y: 20 }}
-    animate={{ opacity: 1, y: 0 }}
-    transition={{ duration: 0.5, ease: [0.4, 0, 0.2, 1] }}
-    className={`bg-gradient-to-br from-card via-card/95 to-card/90 border-2 border-border/30 rounded-2xl p-6 shadow-2xl hover:shadow-3xl hover:border-primary/20 transition-all duration-300 backdrop-blur-sm ${className}`}
-  >
-    {title && (
-      <div className="flex items-start justify-between mb-5 pb-4 border-b-2 border-gradient-to-r from-primary/20 via-border/40 to-primary/20">
-        <div className="flex-1">
-          <h3 className="text-lg font-bold text-foreground flex items-center gap-3">
-            {Icon && (
-              <div className="p-2.5 rounded-xl bg-gradient-to-br from-primary/20 via-primary/15 to-primary/10 border-2 border-primary/30 shadow-md">
-                <Icon size={20} className="text-primary" />
-              </div>
+const VizCard = ({ title, description, icon: Icon, children, className = "" }) => {
+  // Safely convert description to string if it's an object
+  const safeDescription = typeof description === 'string' 
+    ? description 
+    : (description && typeof description === 'object' 
+        ? (description.text || description.value || description.answer || '') 
+        : '');
+  
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.5, ease: [0.4, 0, 0.2, 1] }}
+      className={`bg-gradient-to-br from-card via-card/95 to-card/90 border border-white/[0.06] rounded-2xl p-6 shadow-xl hover:shadow-2xl hover:border-primary/20 transition-all duration-300 backdrop-blur-sm ${className}`}
+    >
+      {title && (
+        <div className="flex items-start justify-between mb-5 pb-4 border-b border-white/[0.06]">
+          <div className="flex-1">
+            <h3 className="text-lg font-bold text-foreground flex items-center gap-3 font-[family-name:var(--font-heading)] tracking-tight">
+              {Icon && (
+                <div className="p-2.5 rounded-xl bg-gradient-to-br from-primary/15 via-primary/10 to-primary/5 border border-primary/20">
+                  <Icon size={20} className="text-primary" />
+                </div>
+              )}
+              <span>{title}</span>
+            </h3>
+            {safeDescription && (
+              <p className="text-sm text-muted-foreground mt-2 leading-relaxed">{safeDescription}</p>
             )}
-            <span className="bg-gradient-to-r from-foreground to-foreground/90 bg-clip-text text-transparent">
-              {title}
-            </span>
-          </h3>
-          {description && (
-            <p className="text-sm text-muted-foreground mt-2 leading-relaxed">{description}</p>
-          )}
+          </div>
         </div>
-      </div>
-    )}
-    {children}
-  </motion.div>
-);
+      )}
+      {children}
+    </motion.div>
+  );
+};
 
 // ============================================================================
 // CUSTOM TOOLTIP
@@ -418,7 +458,7 @@ export const PieChartViz = ({ viz }) => {
     const dataValue = entry?.payload?.value || entry?.value || 0;
     const percent = total > 0 ? ((dataValue / total) * 100).toFixed(1) : "0.0";
     return (
-      <span className="text-sm text-foreground">
+      <span className="text-sm text-foreground" style={{ letterSpacing: 'normal', wordSpacing: 'normal', textTransform: 'none' }}>
         {formatLabel(value)} <span className="text-muted-foreground">({percent}%)</span>
       </span>
     );
@@ -471,12 +511,12 @@ export const PieChartViz = ({ viz }) => {
               height={100}
               iconType="circle"
               iconSize={12}
-              wrapperStyle={{ paddingTop: "20px" }}
+              wrapperStyle={{ paddingTop: "20px", letterSpacing: "normal", textTransform: "none" }}
               formatter={(value, entry) => {
                 const dataValue = entry?.payload?.value || 0;
                 const percent = total > 0 ? ((dataValue / total) * 100).toFixed(1) : "0.0";
                 return (
-                  <span className="text-sm font-medium text-foreground">
+                  <span className="text-sm font-medium text-foreground" style={{ letterSpacing: 'normal', wordSpacing: 'normal', textTransform: 'none' }}>
                     {formatLabel(value)} <span className="text-muted-foreground">({percent}%)</span>
                   </span>
                 );
@@ -649,16 +689,16 @@ export const MetricCardViz = ({ viz, index = 0 }) => {
   const { data = {}, title, description } = viz;
   const { value, delta, unit } = data;
 
-  // Use brighter, more vibrant colors for metric cards
+  // Teal + Deep Navy metric card accent colors
   const brightColors = [
-    { color: "#3b82f6", light: "#60a5fa" }, // Bright Blue
-    { color: "#8b5cf6", light: "#a78bfa" }, // Bright Purple
-    { color: "#ec4899", light: "#f472b6" }, // Bright Pink
-    { color: "#f59e0b", light: "#fbbf24" }, // Bright Amber
-    { color: "#10b981", light: "#34d399" }, // Bright Emerald
-    { color: "#ef4444", light: "#f87171" }, // Bright Red
-    { color: "#06b6d4", light: "#22d3ee" }, // Bright Cyan
-    { color: "#f97316", light: "#fb923c" }, // Bright Orange
+    { color: "#0ea5e9", light: "#38bdf8" }, // Sky
+    { color: "#14b8a6", light: "#2dd4bf" }, // Teal
+    { color: "#6366f1", light: "#818cf8" }, // Indigo
+    { color: "#f59e0b", light: "#fbbf24" }, // Amber
+    { color: "#10b981", light: "#34d399" }, // Emerald
+    { color: "#8b5cf6", light: "#a78bfa" }, // Violet
+    { color: "#06b6d4", light: "#22d3ee" }, // Cyan
+    { color: "#0e7490", light: "#0891b2" }, // Deep Teal
   ];
   const selectedColor = brightColors[index % brightColors.length];
 
@@ -689,27 +729,38 @@ export const MetricCardViz = ({ viz, index = 0 }) => {
   const trendColor =
     delta > 0 ? "text-emerald-500" : delta < 0 ? "text-red-500" : "text-muted-foreground";
 
+  // Determine if value is text (non-numeric) for responsive font sizing
+  const isTextValue = typeof displayValue === "string" && isNaN(Number(displayValue));
+  const isLongText = isTextValue && String(displayValue).length > 8;
+
   return (
     <VizCard title={title} description={description}>
-      <div className="flex items-end justify-between py-4">
+      <div className="flex items-end justify-between py-4 overflow-hidden">
         <motion.div
           initial={{ scale: 0.8, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
           transition={{ type: "spring", stiffness: 200, damping: 15, delay: 0.2 }}
-          className="flex items-baseline gap-2"
+          className="flex items-baseline gap-2 min-w-0 flex-1"
         >
           <span
-            className="text-5xl font-bold"
+            className={`font-bold truncate ${
+              isLongText 
+                ? "text-2xl sm:text-3xl" 
+                : isTextValue 
+                  ? "text-3xl sm:text-4xl" 
+                  : "text-4xl sm:text-5xl"
+            }`}
             style={{
               background: `linear-gradient(135deg, ${selectedColor.color}, ${selectedColor.light})`,
               WebkitBackgroundClip: "text",
               WebkitTextFillColor: "transparent",
               backgroundClip: "text",
             }}
+            title={String(displayValue)}
           >
             {formatValue(displayValue)}
           </span>
-          {unit && <span className="text-xl font-semibold text-muted-foreground">{unit}</span>}
+          {unit && <span className="text-lg sm:text-xl font-semibold text-muted-foreground flex-shrink-0">{unit}</span>}
         </motion.div>
 
         {typeof delta === "number" && (
@@ -880,7 +931,7 @@ export const DataTableViz = ({ viz }) => {
                   <th
                     key={col.key}
                     onClick={() => handleSort(col.key)}
-                    className="text-left p-4 text-foreground font-bold whitespace-nowrap cursor-pointer hover:bg-primary/15 transition-all select-none first:rounded-tl-xl last:rounded-tr-xl border-b-2 border-primary/30 backdrop-blur-sm"
+                    className="text-left p-4 text-foreground font-bold whitespace-nowrap cursor-pointer hover:bg-primary/15 transition-all select-none first:rounded-tl-xl last:rounded-tr-xl border-b border-primary/20 backdrop-blur-sm"
                   >
                     <span className="flex items-center gap-2">
                       {col.label}
@@ -933,15 +984,21 @@ export const DataTableViz = ({ viz }) => {
                       );
                     }
 
+                      // Columns that should wrap text instead of truncating
+                      const wrapColumns = ['reason', 'nextStep', 'nextSteps', 'rationale', 'description', 'summary'];
+                      const shouldWrap = wrapColumns.includes(col.key);
+
                       return (
                         <td
                           key={col.key}
-                          className={`p-4 text-foreground font-medium align-top max-w-[400px] ${
-                            colIdx === 0 ? "font-semibold text-primary" : ""
-                          }`}
+                          className={`p-4 text-foreground font-medium align-top ${
+                            shouldWrap ? "max-w-[300px]" : "max-w-[400px]"
+                          } ${colIdx === 0 ? "font-semibold text-primary" : ""}`}
                           title={String(displayValue)}
                         >
-                          <div className="truncate">{displayValue}</div>
+                          <div className={shouldWrap ? "whitespace-normal break-words" : "truncate"}>
+                            {displayValue}
+                          </div>
                         </td>
                       );
                     })}
@@ -953,7 +1010,7 @@ export const DataTableViz = ({ viz }) => {
         </div>
 
         {totalPages > 1 && (
-          <div className="flex items-center justify-between mt-6 pt-5 border-t-2 border-border/50">
+          <div className="flex items-center justify-between mt-6 pt-5 border-t border-border/30">
             <span className="text-sm font-medium text-muted-foreground">
               Showing {page * pageSize + 1}–{Math.min((page + 1) * pageSize, rows.length)} of{" "}
               <span className="text-foreground font-bold">{rows.length}</span>
@@ -962,7 +1019,7 @@ export const DataTableViz = ({ viz }) => {
               <button
                 onClick={() => setPage((p) => Math.max(0, p - 1))}
                 disabled={page === 0}
-                className="p-2.5 rounded-xl border-2 border-border hover:bg-primary/10 hover:border-primary disabled:opacity-40 disabled:cursor-not-allowed transition-all duration-200 shadow-sm hover:shadow-md"
+                className="p-2.5 rounded-xl border border-border hover:bg-primary/10 hover:border-primary disabled:opacity-40 disabled:cursor-not-allowed transition-all duration-200 shadow-sm hover:shadow-md"
               >
                 <ChevronLeft size={18} />
               </button>
@@ -972,7 +1029,7 @@ export const DataTableViz = ({ viz }) => {
               <button
                 onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
                 disabled={page >= totalPages - 1}
-                className="p-2.5 rounded-xl border-2 border-border hover:bg-primary/10 hover:border-primary disabled:opacity-40 disabled:cursor-not-allowed transition-all duration-200 shadow-sm hover:shadow-md"
+                className="p-2.5 rounded-xl border border-border hover:bg-primary/10 hover:border-primary disabled:opacity-40 disabled:cursor-not-allowed transition-all duration-200 shadow-sm hover:shadow-md"
               >
                 <ChevronRight size={18} />
               </button>
@@ -995,10 +1052,10 @@ export const DataTableViz = ({ viz }) => {
             animate={{ scale: 1, opacity: 1 }}
             exit={{ scale: 0.9, opacity: 0 }}
             onClick={(e) => e.stopPropagation()}
-            className="bg-background rounded-2xl shadow-2xl max-w-7xl w-full max-h-[90vh] overflow-hidden border-2 border-primary/30"
+            className="bg-background rounded-2xl shadow-2xl max-w-7xl w-full max-h-[90vh] overflow-hidden border border-primary/20"
           >
             {/* Modal Header */}
-            <div className="bg-gradient-to-r from-primary/20 via-primary/10 to-primary/20 p-6 border-b-2 border-primary/30 flex items-center justify-between">
+            <div className="bg-gradient-to-r from-primary/20 via-primary/10 to-primary/20 p-6 border-b border-primary/20 flex items-center justify-between">
               <div>
                 <h3 className="text-2xl font-bold text-foreground flex items-center gap-3">
                   <TableIcon className="text-primary" size={28} />
@@ -1036,7 +1093,7 @@ export const DataTableViz = ({ viz }) => {
                       <th
                         key={col.key}
                         onClick={() => handleSort(col.key)}
-                        className="text-left p-4 text-foreground font-bold whitespace-nowrap cursor-pointer hover:bg-primary/20 transition-all border-b-2 border-primary/40"
+                        className="text-left p-4 text-foreground font-bold whitespace-nowrap cursor-pointer hover:bg-primary/20 transition-all border-b border-primary/20"
                       >
                         <span className="flex items-center gap-2">
                           {col.label}
@@ -1083,7 +1140,7 @@ export const DataTableViz = ({ viz }) => {
             </div>
 
             {/* Modal Footer */}
-            <div className="bg-gradient-to-r from-primary/10 via-primary/5 to-primary/10 p-4 border-t-2 border-primary/30">
+            <div className="bg-gradient-to-r from-primary/10 via-primary/5 to-primary/10 p-4 border-t border-primary/20">
               <p className="text-sm text-muted-foreground text-center">
                 Showing all <span className="font-bold text-foreground">{sortedRows.length}</span>{" "}
                 rows
@@ -1108,7 +1165,7 @@ const EmptyState = ({ message = "No data available" }) => (
 );
 
 // ============================================================================
-// IMAGE VISUALIZATION - Renders images with captions
+// IMAGE VISUALIZATION - Renders images with captions (Enhanced for Statista)
 // ============================================================================
 
 const ImageViz = ({ viz }) => {
@@ -1117,6 +1174,9 @@ const ImageViz = ({ viz }) => {
   const caption = data?.caption || description;
   const sourceUrl = data?.sourceUrl;
   const source = data?.source || "Statista";
+  const premium = data?.premium;
+  const [imageLoaded, setImageLoaded] = React.useState(false);
+  const [imageError, setImageError] = React.useState(false);
 
   if (!imageUrl) {
     return (
@@ -1127,36 +1187,262 @@ const ImageViz = ({ viz }) => {
   }
 
   return (
-    <VizCard title={title || "Market Infographic"} description={description}>
-      <div className="space-y-4">
-        <div className="relative bg-muted rounded-lg overflow-hidden">
-          <img
-            src={imageUrl}
-            alt={title || "Infographic"}
-            className="w-full h-auto"
-            onError={(e) => {
-              e.target.style.display = "none";
-              e.target.nextSibling.style.display = "flex";
-            }}
-          />
-          <div
-            className="hidden flex-col items-center justify-center py-12 text-center"
-            style={{ display: "none" }}
-          >
-            <AlertCircle size={32} className="text-muted-foreground mb-3" />
-            <p className="text-sm text-muted-foreground">Failed to load image</p>
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="bg-gradient-to-br from-card via-card/95 to-card/90 border border-white/[0.06] rounded-2xl overflow-hidden shadow-xl hover:shadow-2xl hover:border-primary/20 transition-all duration-300"
+    >
+      {/* Header */}
+      <div className="p-4 border-b border-border/30">
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex-1 min-w-0">
+            <h3 className="text-base font-semibold text-foreground line-clamp-2">
+              {title || "Market Research"}
+            </h3>
+            {caption && caption !== title && (
+              <p className="text-sm text-muted-foreground mt-1 line-clamp-2">{caption}</p>
+            )}
+          </div>
+          <div className="flex items-center gap-2 flex-shrink-0">
+            {premium && (
+              <span className="text-[10px] px-2 py-0.5 bg-amber-500/20 text-amber-400 rounded-full font-medium">
+                Premium
+              </span>
+            )}
+            <span className="text-[10px] px-2 py-0.5 bg-primary/20 text-primary rounded-full font-medium">
+              {source}
+            </span>
           </div>
         </div>
-        {caption && <p className="text-sm text-muted-foreground italic">{caption}</p>}
-        {sourceUrl && (
+      </div>
+      
+      {/* Image Container */}
+      <div className="relative bg-white">
+        {/* Loading skeleton */}
+        {!imageLoaded && !imageError && (
+          <div className="absolute inset-0 bg-muted animate-pulse flex items-center justify-center">
+            <div className="text-center">
+              <div className="w-12 h-12 rounded-full border-2 border-primary/30 border-t-primary animate-spin mx-auto mb-2"></div>
+              <p className="text-xs text-muted-foreground">Loading infographic...</p>
+            </div>
+          </div>
+        )}
+        
+        <img
+          src={imageUrl}
+          alt={title || "Market Infographic"}
+          className={`w-full h-auto transition-opacity duration-300 ${imageLoaded ? 'opacity-100' : 'opacity-0'}`}
+          onLoad={() => setImageLoaded(true)}
+          onError={() => {
+            setImageError(true);
+            setImageLoaded(true);
+          }}
+        />
+        
+        {/* Error state */}
+        {imageError && (
+          <div className="flex flex-col items-center justify-center py-16 bg-muted">
+            <AlertCircle size={40} className="text-muted-foreground mb-3" />
+            <p className="text-sm text-muted-foreground mb-2">Unable to load infographic</p>
+            {sourceUrl && (
+              <a
+                href={sourceUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-xs text-primary hover:underline"
+              >
+                View on {source} →
+              </a>
+            )}
+          </div>
+        )}
+      </div>
+      
+      {/* Footer */}
+      {sourceUrl && !imageError && (
+        <div className="p-3 bg-muted/30 border-t border-border/30 flex items-center justify-between">
+          <span className="text-xs text-muted-foreground">
+            Source: {source}
+          </span>
           <a
             href={sourceUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="text-xs text-primary hover:underline inline-flex items-center gap-1"
+            className="text-xs text-primary hover:underline inline-flex items-center gap-1 font-medium"
           >
-            View on {source} →
+            View Full Report →
           </a>
+        </div>
+      )}
+    </motion.div>
+  );
+};
+
+// ============================================================================
+// TEXT VISUALIZATION - Beautiful text-only display
+// ============================================================================
+
+const TextViz = ({ viz }) => {
+  const { title, description, data } = viz;
+  
+  // Content can be at viz.content or viz.data.content
+  const content = viz.content || data?.content;
+
+  // Parse content - can be a string or structured data
+  const renderContent = () => {
+    // If no content but we have description, just show description (it's already displayed in VizCard)
+    if (!content) {
+      // Just return null - description is already shown in VizCard header
+      return null;
+    }
+
+    // If content is a string, render as paragraphs
+    if (typeof content === "string") {
+      // Split by double newline for paragraphs, or single newline for bullet points
+      const lines = content.split("\n");
+      const hasBullets = lines.some(line => line.trim().startsWith("•") || line.trim().startsWith("-"));
+      
+      if (hasBullets) {
+        return (
+          <div className="space-y-2">
+            {lines.map((line, idx) => {
+              const trimmed = line.trim();
+              if (!trimmed) return null;
+              
+              // Handle bullet points
+              if (trimmed.startsWith("•") || trimmed.startsWith("-")) {
+                const bulletText = trimmed.replace(/^[•\-]\s*/, "");
+                return (
+                  <div key={idx} className="flex items-start gap-2">
+                    <span className="text-primary mt-1">•</span>
+                    <span className="text-foreground/90 leading-relaxed">{bulletText}</span>
+                  </div>
+                );
+              }
+              
+              // Regular text
+              return (
+                <p key={idx} className="text-foreground/90 leading-relaxed">
+                  {trimmed}
+                </p>
+              );
+            })}
+          </div>
+        );
+      }
+      
+      // Standard paragraph rendering
+      return (
+        <div className="prose prose-sm max-w-none dark:prose-invert">
+          {content.split("\n\n").map((paragraph, idx) => (
+            <p key={idx} className="text-foreground/90 leading-relaxed mb-4 last:mb-0">
+              {paragraph}
+            </p>
+          ))}
+        </div>
+      );
+    }
+
+    // If content is an array of sections/paragraphs
+    if (Array.isArray(content)) {
+      return (
+        <div className="space-y-4">
+          {content.map((item, idx) => {
+            // Handle string items
+            if (typeof item === "string") {
+              return (
+                <p key={idx} className="text-foreground/90 leading-relaxed">
+                  {item}
+                </p>
+              );
+            }
+
+            // Handle object items with heading and text
+            if (typeof item === "object" && item !== null) {
+              return (
+                <div key={idx} className="space-y-2">
+                  {item.heading && (
+                    <h4 className="font-semibold text-foreground">{item.heading}</h4>
+                  )}
+                  {item.text && (
+                    <p className="text-foreground/90 leading-relaxed">{item.text}</p>
+                  )}
+                  {item.bullets && Array.isArray(item.bullets) && (
+                    <ul className="list-disc list-inside space-y-1 text-foreground/80 ml-4">
+                      {item.bullets.map((bullet, bIdx) => (
+                        <li key={bIdx}>{bullet}</li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              );
+            }
+
+            return null;
+          })}
+        </div>
+      );
+    }
+
+    // If content is an object with sections
+    if (typeof content === "object" && content !== null) {
+      return (
+        <div className="space-y-6">
+          {Object.entries(content).map(([key, value], idx) => (
+            <div key={idx} className="space-y-2">
+              <h4 className="font-semibold text-foreground capitalize">
+                {formatLabel(key)}
+              </h4>
+              {typeof value === "string" ? (
+                <p className="text-foreground/90 leading-relaxed">{value}</p>
+              ) : Array.isArray(value) ? (
+                <ul className="list-disc list-inside space-y-1 text-foreground/80 ml-4">
+                  {value.map((item, vIdx) => (
+                    <li key={vIdx}>{typeof item === "string" ? item : JSON.stringify(item)}</li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-foreground/90 leading-relaxed">{JSON.stringify(value)}</p>
+              )}
+            </div>
+          ))}
+        </div>
+      );
+    }
+
+    return null;
+  };
+
+  // Get the rendered content
+  const renderedContent = renderContent();
+
+  return (
+    <VizCard title={title} description={!renderedContent ? description : undefined}>
+      <div className="bg-gradient-to-br from-muted/30 to-muted/15 rounded-xl p-6 border border-white/[0.04]">
+        {/* If we have rendered content, show it. Otherwise show description here */}
+        {renderedContent || (
+          <div className="prose prose-sm max-w-none dark:prose-invert">
+            {description && description.split("\n").map((line, idx) => {
+              const trimmed = line.trim();
+              if (!trimmed) return null;
+              
+              if (trimmed.startsWith("•") || trimmed.startsWith("-")) {
+                const bulletText = trimmed.replace(/^[•\-]\s*/, "");
+                return (
+                  <div key={idx} className="flex items-start gap-2 mb-2">
+                    <span className="text-primary mt-0.5">•</span>
+                    <span className="text-foreground/90 leading-relaxed">{bulletText}</span>
+                  </div>
+                );
+              }
+              
+              return (
+                <p key={idx} className="text-foreground/90 leading-relaxed mb-2 last:mb-0">
+                  {trimmed}
+                </p>
+              );
+            })}
+          </div>
         )}
       </div>
     </VizCard>
@@ -1189,6 +1475,8 @@ export const VizRenderer = ({ viz }) => {
       return <MetricCardViz viz={viz} index={viz.index || 0} />;
     case "image":
       return <ImageViz viz={viz} />;
+    case "text":
+      return <TextViz viz={viz} />;
     default:
       return (
         <VizCard title={viz.title || "Unsupported Chart"}>
@@ -1207,6 +1495,7 @@ export const VizList = ({ visualizations = [], agentName, className = "" }) => {
 
   // Group visualizations by type for logical ordering
   const metricCards = visualizations.filter((v) => v.vizType?.toLowerCase() === "card");
+  const textBlocks = visualizations.filter((v) => v.vizType?.toLowerCase() === "text");
   const images = visualizations.filter((v) => v.vizType?.toLowerCase() === "image");
   const barCharts = visualizations.filter((v) => v.vizType?.toLowerCase() === "bar");
   const pieCharts = visualizations.filter((v) => v.vizType?.toLowerCase() === "pie");
@@ -1214,9 +1503,10 @@ export const VizList = ({ visualizations = [], agentName, className = "" }) => {
   const areaCharts = visualizations.filter((v) => v.vizType?.toLowerCase() === "area");
   const tables = visualizations.filter((v) => v.vizType?.toLowerCase() === "table");
 
-  // Logical order: Cards → Charts (Bar, Pie, Line, Area) → Images → Tables
+  // Logical order: Cards → Text → Charts (Bar, Pie, Line, Area) → Images → Tables
   const orderedSections = [
     { type: "cards", items: metricCards, cols: "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3" },
+    { type: "text", items: textBlocks, cols: "grid-cols-1" },
     { type: "bar", items: barCharts, cols: "grid-cols-1" },
     { type: "pie", items: pieCharts, cols: "grid-cols-1" },
     { type: "line", items: lineCharts, cols: "grid-cols-1" },

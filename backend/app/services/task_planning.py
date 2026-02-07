@@ -1,9 +1,10 @@
 from crewai import LLM
 import json
+import re
 
 llm = LLM(
     model="groq/llama-3.3-70b-versatile",
-    max_tokens=300
+    max_tokens=600
 )
 
 PLANNING_SYSTEM_PROMPT = """
@@ -14,130 +15,174 @@ IMPORTANT:
 - All newlines inside string values MUST be escaped as \\n (no raw line breaks).
 - Do not include any text before or after the JSON.
 - Ignore formatting of previous assistant messages.
+- Agent keys MUST be lowercase without underscores (e.g., "iqvia", "exim", "clinical", "patent", "internal", "web")
 
-You are given a user query related to the pharmaceutical domain.
+## AVAILABLE AGENTS AND RESPONSIBILITIES
+- iqvia:
+  Market size, sales trends, CAGR, competitive landscape, therapy area insights.
 
-Your job:
+- exim:
+  Export-import data, API sourcing, trade volumes, import dependency, country-level flows.
 
-1. If the query is clear and actionable:
-   Return:
-   {
-     "type": "plan",
-     "agents": ["AGENT_KEY_1", "AGENT_KEY_2"],
-     "drug": "<drug name or null>",
-     "indication": "<disease/indication or null>"
-   }
+- patent:
+  Patent landscape, filing trends, expiry timelines, freedom-to-operate risks.
 
-2. If the query is vague, broad, or insufficient:
-   Return:
-   {
-     "type": "vague",
-     "message": "Short definition followed by clarification questions (escaped with \\n)",
-     "agents": [],
-     "drug": null,
-     "indication": null
-   }
+- clinical:
+  Clinical trial pipeline, trial phases, sponsors, mechanisms of action.
 
-## AVAILABLE WORKER AGENTS
-- "iqvia": IQVIA Insights Agent - Market size, sales trends, CAGR, therapy competition, competitor data
-- "exim": EXIM Trends Agent - Export-import trade data, API sourcing, trade volumes, import dependency
-- "patent": Patent Landscape Agent - Patent filings, expiry timelines, FTO analysis, IP landscape
-- "clinical": Clinical Trials Agent - Trial pipeline data, sponsor profiles, trial phases, MoA mapping
-- "internal_knowledge": Internal Knowledge Agent - Strategy synthesis, internal research, comparative analysis
-- "report_generator": Report Generator Agent - PDF report generation, summary compilation
-## AGENT SELECTION LOGIC
-- Market size, sales, CAGR, competition analysis → include "iqvia"
-- Export-import, trade data, API sourcing → include "exim"
-- Patents, IP, expiry, FTO → include "patent"
-- Clinical trials, pipeline, sponsors → include "clinical"
-- Internal strategy, synthesis, comparison → include "internal_knowledge"
-- Always include "report_generator" at the end for comprehensive queries
+- internal:
+  Internal documents, uploaded files, prior research, proprietary knowledge.
 
-Available Agent Keys:
-- "IQVIA_AGENT"
-- "EXIM_AGENT"
-- "PATENT_AGENT"
-- "CLINICAL_AGENT"
-- "INTERNAL_KNOWLEDGE_AGENT"
-- "WEB_INTEL_AGENT"
+- web:
+  Real-time web intelligence: Google Trends, news sentiment, Reddit discussions, public buzz.
+
+- report:
+  Consolidates all agent outputs into a structured report.
+
+## REQUIRED INFORMATION FOR A VALID PLAN
+
+A plan MUST NOT be generated unless ALL of the following are known:
+
+1. Drug name (at least one)
+2. Indication / disease (at least one)
+3. Analysis intent (e.g. market analysis, clinical pipeline, patent landscape, or full assessment)
 
 Rules:
-- Always return valid JSON.
-- Never return raw text.
-- No separate 'questions' or 'definition' fields.
-- All clarification must be inside the 'message' string only.
-- No markdown, no commentary.
+- If ONLY a drug name is provided, this is INCOMPLETE.
+- If ONLY an indication is provided, this is INCOMPLETE.
+- If drug is known but indication is missing, ask clarification questions.
+- If indication is known but drug is missing, ask clarification questions.
+- If intent is unclear, ask clarification questions.
+
+In ALL incomplete cases, return type="vague".
+
+
+You are in an iterative planning conversation.
+You will receive full chat history.
+
+Rules:
+- ACCUMULATE information from the ENTIRE chat history. If drug was mentioned earlier and disease is mentioned now, you have BOTH.
+- If information is missing or unclear, ask clarification questions.
+- Do NOT repeat questions already answered in chat history.
+- Only return type="plan" when all required details are clear.
+- Never trigger execution.
+- When user mentions "web" or "online buzz" or "trends" or "news" or "reddit", include "web" agent.
+- When user says "start research", "begin analysis", "go ahead", "let's proceed", "proceed", or similar - check if you have drug + indication, and if yes, generate the plan immediately.
+
+If the query is clear and actionable:
+Return:
+{
+  "type": "plan",
+  "agents": ["iqvia", "exim", "patent", "clinical", "internal", "web", "report"],
+  "drug": ["<drug names>"] or null,
+  "indication": ["<indications>"] or null,
+  "consolidated_prompt": "<A clear prompt combining all information from chat for the agents>"
+}
+
+IMPORTANT: ALWAYS include ALL agents in the list: iqvia, exim, patent, clinical, internal, web, report.
+The "web" agent provides valuable real-time sentiment and trend data and should ALWAYS be included.
+
+If the query is vague or incomplete:
+Return:
+{
+  "type": "vague",
+  "message": "Brief acknowledgment + 2-3 specific questions with concrete options (escaped with \\n)",
+  "agents": [],
+  "drug": null,
+  "indication": null
+}
+
+## CLARIFYING QUESTIONS STYLE
+
+When asking clarifying questions, be CONCISE and ACTIONABLE:
+- Ask only 2-3 specific questions (never more than 4)
+- Offer concrete options when possible (e.g., "Market analysis / Clinical pipeline / Patent landscape / Full assessment")
+- If you already have drug + indication, suggest "Say 'Start Research' to proceed with a comprehensive assessment"
+- Don't ask redundant questions that overlap
+
+Example good clarification:
+"I can help analyze metformin. To create a focused plan:\\n\\n1. What indication? (Type 2 Diabetes / PCOS / Weight management / Other)\\n2. Analysis type? (Market size / Clinical trials / Patent landscape / Full assessment)\\n\\nOr say 'Start Research' for a comprehensive full assessment."
+
+Example bad clarification (too many questions):
+"1. What drug?\\n2. What disease?\\n3. What geography?\\n4. What timeframe?\\n5. What competitors?\\n6. What analysis type?"
 """
 
-import re
 
 def _safe_json_parse(text: str):
-    # Extract first JSON object
     start = text.find("{")
     end = text.rfind("}")
     if start == -1 or end == -1:
-        raise ValueError("No JSON object found in LLM output")
+        raise ValueError("No JSON object found")
 
-    json_text = text[start:end+1]
-
-    # Remove invalid control characters
+    json_text = text[start:end + 1]
     json_text = re.sub(r'[\x00-\x1f\x7f]', '', json_text)
-
     return json.loads(json_text)
 
 
-def plan_tasks(user_prompt: str, session: dict):
+def plan_tasks(session: dict):
+    """
+    Iterative planner.
+    Uses full chat history to decide:
+    - ask questions
+    - OR produce final plan
+    """
+
     messages = [
         {"role": "system", "content": PLANNING_SYSTEM_PROMPT}
     ]
 
-    # Add previous chat history for context
     for turn in session.get("chatHistory", []):
         messages.append({
             "role": turn["role"],
             "content": turn["content"]
         })
 
-    # Add current user message
-    messages.append({"role": "user", "content": user_prompt})
-
     response = llm.call(messages)
-    print("Planning Response:\n", response)
 
-    try:
-        result = _safe_json_parse(response)
-
-        if result.get("type") == "vague":
-            parts = []
-
-            if "definition" in result:
-                parts.append(result["definition"])
-
-            if "message" in result:
-                parts.append(result["message"])
-
-            if "questions" in result:
-                questions_text = "\n".join([f"• {q}" for q in result["questions"]])
-                parts.append("Please clarify:\n" + questions_text)
-
-            result["message"] = "\n\n".join(parts)
-            result.pop("definition", None)
-            result.pop("questions", None)
-
-        return result
-
-    except Exception as e:
-        print(f"[TASK_PLANNING] Error parsing LLM response: {e}")
-
+    if not response or not isinstance(response, str):
+        print("[PLANNING ERROR] Empty or invalid LLM response:", response)
         return {
             "type": "vague",
-            "message": (
-                "this is wrong response from the LLM, "
-            ),
+            "message": "I couldn’t generate a plan due to an internal issue.\nCould you please repeat or rephrase your request?",
             "agents": [],
             "drug": None,
             "indication": None
         }
 
+    print("PLANNING RAW RESPONSE:\n", response)
 
+    try:
+        result = _safe_json_parse(response)
+        if result.get("type") == "plan":
+            drug = result.get("drug")
+            indication = result.get("indication")
 
+            # Force iteration if required fields are missing
+            if not drug or not indication:
+                return {
+                    "type": "vague",
+                    "message": (
+                        "I need a bit more detail to create your analysis plan:\\n\\n"
+                        "1. What is the target **indication** or disease?\\n"
+                        "2. What type of analysis? (Market size / Clinical trials / Patent landscape / Full assessment)\\n\\n"
+                        "Once you provide these, I'll create a comprehensive research plan."
+                    ),
+                    "agents": [],
+                    "drug": None,
+                    "indication": None
+                }
+
+            return result
+        
+        # If type is "vague" or any other type, return the result as-is
+        return result
+
+    except Exception as e:
+        print("[PLANNING ERROR]", e)
+        return {
+            "type": "vague",
+            "message": "I could not correctly understand the request.\\nCan you please rephrase or provide more details?",
+            "agents": [],
+            "drug": None,
+            "indication": None
+        }

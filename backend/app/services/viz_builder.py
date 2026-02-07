@@ -275,13 +275,53 @@ def build_clinical_visualizations(payload: dict) -> List[dict]:
     return viz
 
 
+def build_line_chart(
+    *,
+    id: str,
+    title: str,
+    items: Iterable[dict] | dict,
+    x_field: str,
+    y_field: str,
+    description: str | None = None,
+) -> dict:
+    """Build a line chart visualization."""
+    if isinstance(items, dict):
+        data = [{x_field: k, y_field: v} for k, v in items.items()]
+    else:
+        data = list(items)
+
+    viz = Visualization(
+        id=id,
+        vizType=VisualizationType.LINE,
+        title=title,
+        description=description,
+        data=data,
+        config=VizConfig(
+            xField=x_field,
+            yField=y_field,
+            legend=False,
+            tooltip=True,
+        ),
+    )
+    return viz.model_dump()
+
+
 def build_iqvia_visualizations(payload: dict) -> List[dict]:
-    """Create a standard set of visualizations from the IQVIA agent payload."""
+    """Create a comprehensive set of visualizations from the IQVIA agent payload.
+    
+    This function creates:
+    1. Market overview metric cards (market size, CAGR, growth)
+    2. Market growth trajectory line chart  
+    3. Competitor market share pie chart
+    4. Market insights text block
+    5. Statista infographics as images
+    """
     viz: List[dict] = []
 
     market_data = payload.get("market_data", {}) if payload else {}
     cagr_analysis = payload.get("cagr_analysis", {}) if payload else {}
     infographics = payload.get("infographics", []) if payload else []
+    input_data = payload.get("input", {}) if payload else {}
 
     # Extract data structure from the nested market_data response
     data_section = market_data.get("data", {}) if market_data else {}
@@ -291,53 +331,179 @@ def build_iqvia_visualizations(payload: dict) -> List[dict]:
 
     forecast_data = market_forecast.get("data", [])
     competitive_data = competitive_share.get("data", [])
-
-    # Market Forecast Chart
+    
+    # Helper to parse percentage strings
+    def parse_share_value(share):
+        if share is None:
+            return 0
+        if isinstance(share, (int, float)):
+            return float(share)
+        cleaned = str(share).replace('~', '').replace('%', '').strip()
+        try:
+            return float(cleaned)
+        except (ValueError, TypeError):
+            return 0
+    
+    # ===== 1. KEY METRICS CARDS =====
+    # Market Size Card (latest year)
     if forecast_data:
+        latest_value = forecast_data[-1].get("value")
+        latest_year = forecast_data[-1].get("year", "")
+        if latest_value:
+            viz.append(
+                build_metric_card(
+                    id="market_size",
+                    title=f"Market Size ({latest_year})",
+                    value=latest_value,
+                    unit="B USD",
+                )
+            )
+    
+    # CAGR Metric Card
+    if cagr_analysis and "cagr_percent" in cagr_analysis:
+        cagr_val = cagr_analysis.get("cagr_percent")
         viz.append(
-            build_bar_chart(
-                id="market_forecast",
-                title=market_forecast.get("title", "Market Forecast"),
-                items=forecast_data,
-                x_field="year",
-                y_field="value",
-                description=f"Market size forecast for {payload.get('input', {}).get('drug_name', 'drug')}",
+            build_metric_card(
+                id="cagr_growth",
+                title="CAGR",
+                value=round(cagr_val, 1) if isinstance(cagr_val, (int, float)) else cagr_val,
+                unit="%",
             )
         )
 
-    # Competitive Share Chart
+    # Total Growth Metric Card
+    if cagr_analysis and "total_growth_percent" in cagr_analysis:
+        total_growth = cagr_analysis.get("total_growth_percent")
+        viz.append(
+            build_metric_card(
+                id="total_growth",
+                title="Total Growth",
+                value=round(total_growth, 1) if isinstance(total_growth, (int, float)) else total_growth,
+                unit="%",
+            )
+        )
+    
+    # Market Leader Card (if competitive data available)
     if competitive_data:
+        leader = competitive_data[0]
+        viz.append(
+            build_metric_card(
+                id="market_leader",
+                title="Market Leader",
+                value=f"{leader.get('company', 'N/A')} ({leader.get('share', 'N/A')})",
+            )
+        )
+
+    # ===== 2. MARKET GROWTH LINE CHART =====
+    if forecast_data:
+        # Build line chart data with proper formatting
+        line_data = []
+        for item in forecast_data:
+            line_data.append({
+                "year": str(item.get("year", "")),
+                "value": item.get("value", 0),
+            })
+        
+        viz.append(
+            build_line_chart(
+                id="market_growth_trend",
+                title=market_forecast.get("title", "Market Growth Trajectory"),
+                items=line_data,
+                x_field="year",
+                y_field="value",
+                description=market_forecast.get("description", "Market size forecast showing growth trajectory over time (USD Billions)"),
+            )
+        )
+
+    # ===== 3. COMPETITIVE MARKET SHARE PIE CHART =====
+    if competitive_data:
+        pie_data = [
+            {"label": item.get("company"), "value": parse_share_value(item.get("share"))}
+            for item in competitive_data
+            if item and item.get("company")
+        ]
+        
         viz.append(
             build_pie_chart(
                 id="competitive_share",
                 title=competitive_share.get("title", "Competitive Market Share"),
-                items=[
-                    {"label": item.get("company"), "value": item.get("share")}
-                    for item in competitive_data
-                    if item
-                ],
+                items=pie_data,
                 label_field="label",
                 value_field="value",
+                description=competitive_share.get("description", "Market share distribution among key players"),
             )
         )
 
+    # ===== 4. MARKET INSIGHTS TEXT BLOCK =====
+    if forecast_data or competitive_data or cagr_analysis:
+        insights = []
+        
+        # Generate insights from data
+        if forecast_data and len(forecast_data) >= 2:
+            start_val = forecast_data[0].get("value", 0)
+            end_val = forecast_data[-1].get("value", 0)
+            start_year = forecast_data[0].get("year", "")
+            end_year = forecast_data[-1].get("year", "")
+            if start_val and end_val:
+                growth_pct = ((end_val - start_val) / start_val) * 100
+                insights.append(f"• Market projected to grow from ${start_val}B ({start_year}) to ${end_val}B ({end_year}), representing {growth_pct:.1f}% total growth")
+        
+        if cagr_analysis and cagr_analysis.get("cagr_percent"):
+            cagr = cagr_analysis.get("cagr_percent")
+            trend = "strong" if cagr > 10 else "moderate" if cagr > 5 else "stable"
+            insights.append(f"• Market shows {trend} growth trajectory with {cagr:.1f}% CAGR")
+        
+        if competitive_data:
+            top_3 = competitive_data[:3]
+            top_3_names = [c.get("company", "Unknown") for c in top_3]
+            top_3_share = sum(parse_share_value(c.get("share")) for c in top_3)
+            insights.append(f"• Top 3 players ({', '.join(top_3_names)}) control ~{top_3_share:.0f}% of the market")
+            
+            # Check market concentration
+            leader_share = parse_share_value(competitive_data[0].get("share", 0))
+            if leader_share > 50:
+                insights.append(f"• Market is highly concentrated with dominant leader holding >{leader_share:.0f}% share")
+            elif leader_share > 30:
+                insights.append("• Market shows moderate concentration with opportunities for challengers")
+            else:
+                insights.append("• Fragmented market with significant opportunities for differentiation")
+        
+        if insights:
+            viz.append({
+                "id": "market_insights",
+                "vizType": "text",
+                "title": "Market Intelligence Summary",
+                "data": {"text": "\n".join(insights)},
+                "description": "Key insights derived from market data analysis"
+            })
+
+    # ===== 5. DETAILED DATA TABLES =====
     # Market forecast table
     if forecast_data:
+        # Format values with billion notation
+        formatted_rows = []
+        for item in forecast_data:
+            formatted_rows.append({
+                "year": item.get("year"),
+                "value": f"${item.get('value', 0)}B",
+                "raw_value": item.get("value", 0)
+            })
+        
         columns = [
             {"key": "year", "label": "Year"},
-            {"key": "value", "label": "Market Size (USD)"},
+            {"key": "value", "label": "Market Size"},
         ]
         viz.append(
             build_table(
                 id="market_forecast_table",
                 title="Market Forecast Details",
                 columns=columns,
-                rows=forecast_data,
+                rows=formatted_rows,
                 page_size=10,
             )
         )
 
-    # Competitive share table
+    # Competitive share table  
     if competitive_data:
         columns = [
             {"key": "company", "label": "Company"},
@@ -346,43 +512,21 @@ def build_iqvia_visualizations(payload: dict) -> List[dict]:
         viz.append(
             build_table(
                 id="competitive_share_table",
-                title="Competitive Market Share Details",
+                title="Competitive Landscape Details",
                 columns=columns,
                 rows=competitive_data,
                 page_size=10,
             )
         )
 
-    # CAGR Metric Card
-    if cagr_analysis and "cagr_percent" in cagr_analysis:
-        viz.append(
-            build_metric_card(
-                id="cagr_growth",
-                title="Compound Annual Growth Rate (CAGR)",
-                value=cagr_analysis.get("cagr_percent"),
-                unit="%",
-            )
-        )
-
-    # Total Growth Metric Card
-    if cagr_analysis and "total_growth_percent" in cagr_analysis:
-        viz.append(
-            build_metric_card(
-                id="total_growth",
-                title="Total Growth",
-                value=cagr_analysis.get("total_growth_percent"),
-                unit="%",
-            )
-        )
-
-    # Add Statista infographics as image visualizations
-    for idx, infographic in enumerate(infographics):
+    # ===== 6. STATISTA INFOGRAPHICS =====
+    for idx, infographic in enumerate(infographics[:6]):  # Limit to 6 infographics
         viz.append(
             {
                 "id": f"infographic_{idx}",
                 "vizType": "image",
-                "title": infographic.get("title", "Market Infographic"),
-                "description": infographic.get("subtitle", ""),
+                "title": infographic.get("title", "Market Research"),
+                "description": infographic.get("subtitle") or infographic.get("description", ""),
                 "data": {
                     "imageUrl": infographic.get("content"),
                     "caption": infographic.get("description", ""),
@@ -412,34 +556,37 @@ def build_patent_visualizations(payload: dict) -> List[dict]:
     verifications = payload.get("verifications", [])
     parsed_input = payload.get("input", {})
 
-    # Extract data from FTO result (support both old and new fields)
-    fto_risk_index = fto.get("ftoRiskIndex", 0)
-    fto_risk_band = fto.get("ftoRiskBand", "LOW")
-    fto_status = fto.get("ftoStatus", "UNKNOWN")
-    confidence = fto.get("confidence", "LOW")
+    # Extract data from FTO result (support both old and new canonical fields)
+    fto_status = fto.get("ftoStatus", "CLEAR")
+    fto_date = fto.get("ftoDate") or fto.get("earliestFreedomDate")  # Support both field names
+    patents_found = fto.get("patentsFound", 0)
+    confidence = fto.get("confidence", "LOW")  # Kept in memory but not displayed
     blocking_patents = fto.get("blockingPatents", [])
-    non_blocking_patents = fto.get("nonBlockingPatents", [])
-    expired_patents = fto.get("expiredPatents", [])
-    uncertain_patents = fto.get("uncertainPatents", [])
-    earliest_freedom_date = fto.get("earliestFreedomDate")
+    
+    # Get non-blocking patents from expandedResults (new schema) or fallback to old fields
+    expanded_results = fto.get("expandedResults", {})
+    non_blocking_patents = expanded_results.get("nonBlockingPatents", fto.get("nonBlockingPatents", []))
+    expired_patents = expanded_results.get("expiredPatents", fto.get("expiredPatents", []))
+    uncertain_patents = expanded_results.get("uncertainPatents", fto.get("uncertainPatents", []))
+    
     recommended_actions = fto.get("recommendedActions", [])
-    # NOTE: Removed scoring_notes and raw_score - internal artifacts not for display
+    discovery = payload.get("discovery", {})
+    
+    # Use patentsFound from FTO result, fallback to discovery count
+    if patents_found == 0:
+        patents_found = discovery.get("totalFound", len(discovery.get("patents", [])))
 
-    # ----- Risk Band Card (primary metric) -----
-    viz.append(
-        build_metric_card(
-            id="fto_risk_band",
-            title="FTO Risk Level",
-            value=fto_risk_band,
-        )
-    )
-
-    # ----- FTO Status Card (human readable status) -----
+    # ----- FTO Status Card (Title Case - no ALL CAPS) -----
+    # Map canonical status to display text
     status_display = {
-        "CLEAR": "CLEAR",
-        "LOW_RISK": "LOW RISK",
-        "MODERATE_RISK": "MODERATE RISK",
-        "HIGH_RISK": "HIGH RISK",
+        "CLEAR": "Clear",
+        "NEEDS_MONITORING": "Monitor",
+        "AT_RISK": "At Risk",
+        "BLOCKED": "Blocked",
+        # Legacy mappings
+        "LOW_RISK": "Low Risk",
+        "MODERATE_RISK": "At Risk",
+        "HIGH_RISK": "Blocked",
     }
     viz.append(
         build_metric_card(
@@ -449,90 +596,73 @@ def build_patent_visualizations(payload: dict) -> List[dict]:
         )
     )
 
-    # ----- Confidence Card (simplified: HIGH/MEDIUM/LOW) -----
+    # ----- Patents Found Card -----
     viz.append(
         build_metric_card(
-            id="confidence",
-            title="Analysis Confidence",
-            value=confidence,
-        )
-    )
-
-    # ----- Patents Discovered Card (use totalFound from API, not filtered count) -----
-    patents_discovered = discovery.get("totalFound", len(discovery.get("patents", [])))
-    viz.append(
-        build_metric_card(
-            id="patents_discovered",
+            id="patents_found",
             title="Patents Found",
-            value=patents_discovered,
+            value=patents_found,
         )
     )
 
-    # ----- Earliest Freedom Date Card -----
-    if earliest_freedom_date:
+    # ----- FTO Date Card (only if blocking patents exist) -----
+    if fto_date:
         viz.append(
             build_metric_card(
-                id="freedom_date",
-                title="Freedom Date",
-                value=earliest_freedom_date,
+                id="fto_date",
+                title="FTO Date",
+                value=fto_date,
             )
         )
 
-    # ----- Patent Breakdown Pie Chart (Fixed: explicit labels, no NaN) -----
-    # Use explicit string labels and include all categories even if zero
+    # ----- Patent Breakdown Pie Chart (2 slices: Blocking vs Non-Blocking) -----
+    # Combine expired/uncertain into non-blocking category
     patent_breakdown = {}
     
-    # Always use explicit string keys (prevents NaN in legend)
+    # Count patents by category
     blocking_count = len(blocking_patents) if blocking_patents else 0
     non_blocking_count = len(non_blocking_patents) if non_blocking_patents else 0
     expired_count = len(expired_patents) if expired_patents else 0
     uncertain_count = len(uncertain_patents) if uncertain_patents else 0
     
-    # Only add categories with non-zero counts - ensure values are integers
-    if blocking_count > 0:
-        patent_breakdown["Blocking"] = int(blocking_count)
-    if non_blocking_count > 0:
-        patent_breakdown["Non-blocking"] = int(non_blocking_count)
-    if expired_count > 0:
-        patent_breakdown["Expired"] = int(expired_count)
-    if uncertain_count > 0:
-        patent_breakdown["Uncertain"] = int(uncertain_count)
+    # Combine all non-blocking categories (non-blocking + expired + uncertain)
+    total_non_blocking = non_blocking_count + expired_count + uncertain_count
     
-    # Assertion: all keys must be non-empty strings and values must be positive integers
-    assert all(isinstance(k, str) and k for k in patent_breakdown.keys()), \
-        "Pie chart labels must be non-empty strings"
-    assert all(isinstance(v, int) and v > 0 for v in patent_breakdown.values()), \
-        f"Pie chart values must be positive integers, got {patent_breakdown}"
+    # Build 2-slice pie chart (clean labels, tooltips show percentages)
+    total_patents = blocking_count + total_non_blocking
     
-    # Always render pie chart if any patents were analyzed
-    total_patents = blocking_count + non_blocking_count + expired_count + uncertain_count
     if total_patents > 0:
+        if blocking_count > 0:
+            patent_breakdown["Blocking"] = int(blocking_count)
+        
+        if total_non_blocking > 0:
+            patent_breakdown["Non-Blocking"] = int(total_non_blocking)
+        
+        # Calculate percentages for description
+        blocking_pct = round((blocking_count / total_patents) * 100, 1) if blocking_count > 0 else 0
+        non_blocking_pct = round((total_non_blocking / total_patents) * 100, 1) if total_non_blocking > 0 else 0
+        
+        # Render pie chart with exactly 2 slices
         viz.append(
             build_pie_chart(
                 id="patent_breakdown",
-                title="Patent Breakdown",
+                title="Patent Landscape Overview",
                 items=patent_breakdown,
-                description=f"Distribution of {total_patents} analyzed patent(s) by blocking status",
+                description=f"Analysis of {total_patents} patents: {blocking_count} blocking ({blocking_pct}%), {total_non_blocking} non-blocking ({non_blocking_pct}%)",
             )
         )
 
-    # ----- Blocking Patents Table (Enhanced v2: normalizedRisk, riskBand, sourceUrl) -----
+    # ----- Blocking Patents Table (Simplified: no risk numbers per design spec) -----
     if blocking_patents:
         blocking_rows = []
         for p in blocking_patents:
-            # Get normalized risk (0-100) with assertion
-            normalized_risk = p.get("normalizedRisk", 50)
-            assert isinstance(normalized_risk, (int, float)) and 0 <= normalized_risk <= 100, \
-                f"normalizedRisk must be 0-100 integer, got {normalized_risk}"
+            # Use patentNumber or patent field (support both schemas)
+            patent_num = p.get("patentNumber") or p.get("patent", "Unknown")
             
             blocking_rows.append({
-                "patent": p.get("patent", "Unknown"),
-                "patentUrl": p.get("sourceUrl", ""),
-                "title": p.get("title", "")[:50] + "..." if len(p.get("title", "")) > 50 else p.get("title", "Unknown"),
-                "status": p.get("status", "Blocking"),
+                "patent": patent_num,
                 "claimType": p.get("claimType", "Unknown"),
-                "expiry": p.get("expectedExpiry", p.get("expiry", "Unknown")),
-                "normalizedRisk": int(normalized_risk),  # 0-100 integer
+                "expiry": p.get("expiry") or p.get("expectedExpiry", "Unknown"),
                 "riskBand": p.get("riskBand", "HIGH"),
                 "reason": p.get("reason", "Blocks intended use"),
             })
@@ -545,7 +675,6 @@ def build_patent_visualizations(payload: dict) -> List[dict]:
                     {"key": "patent", "label": "Patent Number"},
                     {"key": "claimType", "label": "Claim Type"},
                     {"key": "expiry", "label": "Expiry Date"},
-                    {"key": "normalizedRisk", "label": "Risk (0-100)"},
                     {"key": "riskBand", "label": "Risk Band"},
                     {"key": "reason", "label": "Reason"},
                 ],
@@ -554,70 +683,39 @@ def build_patent_visualizations(payload: dict) -> List[dict]:
             )
         )
 
-    # ----- Claim Type Distribution (if blocking patents exist) -----
-    if blocking_patents:
-        claim_types = {}
-        for p in blocking_patents:
-            ct = p.get("claimType", "Unknown")
-            claim_types[ct] = claim_types.get(ct, 0) + 1
-        
-        if claim_types:
-            viz.append(
-                build_pie_chart(
-                    id="claim_types",
-                    title="Blocking Patent Claim Types",
-                    items=claim_types,
-                    description="Distribution of claim types among blocking patents",
-                )
-            )
+    # NOTE: Removed "Blocking Patent Claim Types" pie chart per design spec
+    # Claim type distribution is available in blockingPatentsSummary.claimTypeCounts if needed
+    
+    # NOTE: Non-blocking patents are kept in memory (expandedResults) but not displayed
+    # They are available for export/drill-down but not shown in the main visualization
 
-    # ----- Non-Blocking Patents Table (if any) -----
-    if non_blocking_patents:
-        non_blocking_rows = []
-        for p in non_blocking_patents:
-            non_blocking_rows.append({
-                "patent": p.get("patent", "Unknown"),
-                "patentUrl": p.get("sourceUrl", ""),
-                "claimType": p.get("claimType", "Unknown"),
-                "reason": p.get("reason", "Does not block intended use"),
-                "expiry": p.get("expectedExpiry", p.get("expiry", "Unknown")),
-            })
-        
-        viz.append(
-            build_table(
-                id="non_blocking_patents",
-                title="Non-Blocking Patents",
-                columns=[
-                    {"key": "patent", "label": "Patent Number"},
-                    {"key": "claimType", "label": "Claim Type"},
-                    {"key": "expiry", "label": "Expiry Date"},
-                    {"key": "reason", "label": "Reason"},
-                ],
-                rows=non_blocking_rows,
-                description="Patents analyzed but found not to block the intended use",
-            )
-        )
-
-    # ----- Recommended Actions Table (Enhanced with feasibility) -----
+    # ----- Recommended Actions Table (Updated: reason + nextStep singular) -----
     if recommended_actions:
         action_rows = []
         for i, action in enumerate(recommended_actions):
             if isinstance(action, dict):
+                # Support both "reason" (new) and "rationale" (legacy) field names
+                reason = action.get("reason") or action.get("rationale", "")
+                # Support both "nextStep" (new singular) and "nextSteps" (legacy array)
+                next_step = action.get("nextStep", "")
+                if not next_step and action.get("nextSteps"):
+                    next_step = action.get("nextSteps")[0] if action.get("nextSteps") else ""
+                
                 action_rows.append({
                     "priority": i + 1,
                     "action": action.get("action", "Unknown"),
-                    "rationale": action.get("rationale", "")[:100] + "..." if len(action.get("rationale", "")) > 100 else action.get("rationale", ""),
                     "feasibility": action.get("feasibility", "MEDIUM"),
-                    "nextSteps": ", ".join(action.get("nextSteps", [])[:2]) if action.get("nextSteps") else "",
+                    "reason": reason,
+                    "nextStep": next_step,
                 })
             else:
                 # Legacy string format
                 action_rows.append({
                     "priority": i + 1,
                     "action": str(action),
-                    "rationale": "",
                     "feasibility": "MEDIUM",
-                    "nextSteps": "",
+                    "reason": "",
+                    "nextStep": "",
                 })
         
         viz.append(
@@ -628,8 +726,8 @@ def build_patent_visualizations(payload: dict) -> List[dict]:
                     {"key": "priority", "label": "#"},
                     {"key": "action", "label": "Action"},
                     {"key": "feasibility", "label": "Feasibility"},
-                    {"key": "rationale", "label": "Rationale"},
-                    {"key": "nextSteps", "label": "Next Steps"},
+                    {"key": "reason", "label": "Reason"},
+                    {"key": "nextStep", "label": "Next Step"},
                 ],
                 rows=action_rows,
                 description="Prioritized list of recommended next steps with feasibility ratings",
@@ -686,15 +784,7 @@ def build_exim_visualizations(payload: dict) -> List[dict]:
     hs_code = input_data.get("hs_code", "")
     data_source = payload.get("data_source", "Trade API")
     
-    # Add summary description as text if available
-    if llm_insights.get("summary_description"):
-        viz.append({
-            "id": "exim_summary",
-            "vizType": "text",
-            "title": f"Trade Intelligence Summary - {product.title()}",
-            "description": llm_insights.get("summary_description"),
-            "data": {"content": llm_insights.get("summary_description")},
-        })
+    # NOTE: Summary description removed per design spec - too verbose
     
     # 1. Top Trading Partners Bar Chart
     if top_partners:
@@ -717,26 +807,7 @@ def build_exim_visualizations(payload: dict) -> List[dict]:
             )
         )
     
-    # 2. Growth Distribution Pie Chart
-    if top_partners:
-        # Categorize partners by growth
-        positive_growth = sum(1 for p in top_partners if p.get("growth", 0) > 0)
-        negative_growth = sum(1 for p in top_partners if p.get("growth", 0) < 0)
-        stable = len(top_partners) - positive_growth - negative_growth
-        
-        growth_dist = [
-            {"label": "Positive Growth", "value": positive_growth},
-            {"label": "Negative Growth", "value": negative_growth},
-            {"label": "Stable", "value": stable},
-        ]
-        viz.append(
-            build_pie_chart(
-                id="growth_distribution",
-                title=f"{trade_type} Growth Distribution by Partner",
-                description="Number of trading partners by growth category",
-                items=growth_dist,
-            )
-        )
+    # NOTE: Growth Distribution Pie Chart removed per design spec
     
     # 3. Trade Data Table
     if rows:
@@ -787,16 +858,17 @@ def build_exim_visualizations(payload: dict) -> List[dict]:
                 )
             )
         
-        # Overall Growth
-        overall_growth = summary.get("overall_growth", 0)
-        if overall_growth is not None:
+        # YoY Growth - Use "overall_growth" field from EXIM agent (was incorrectly looking for "yoy_growth_percent")
+        yoy_growth = summary.get("overall_growth", summary.get("yoy_growth_percent", 0))
+        if yoy_growth is not None and yoy_growth != 0:
+            # Format growth as percentage string
+            growth_str = f"{yoy_growth:+.1f}%"
             viz.append(
                 build_metric_card(
-                    id="overall_growth",
-                    title="Year-over-Year Growth",
-                    value=round(overall_growth, 2),
-                    unit="%",
-                    delta=overall_growth,
+                    id="yoy_growth",
+                    title="YoY Growth",
+                    value=growth_str,
+                    unit="",
                 )
             )
         
@@ -875,15 +947,7 @@ def build_exim_visualizations(payload: dict) -> List[dict]:
                 )
             )
         
-        # Diversification recommendation as text
-        if sourcing.get("diversification_recommendation"):
-            viz.append({
-                "id": "sourcing_recommendation",
-                "vizType": "text",
-                "title": "Sourcing Strategy Recommendation",
-                "description": sourcing.get("diversification_recommendation"),
-                "data": {"content": sourcing.get("diversification_recommendation")},
-            })
+        # NOTE: Sourcing recommendation moved to bottom of visualization list
     
     # 7. Import Dependency Analysis (from LLM data)
     dependency = llm_insights.get("import_dependency", {})
@@ -930,25 +994,34 @@ def build_exim_visualizations(payload: dict) -> List[dict]:
                 )
             )
         
-        # Risk assessment and recommendations as text
-        if dependency.get("risk_assessment"):
-            viz.append({
-                "id": "risk_assessment",
-                "vizType": "text",
-                "title": "Supply Chain Risk Assessment",
-                "description": dependency.get("risk_assessment"),
-                "data": {"content": dependency.get("risk_assessment")},
-            })
-        
-        recommendations = dependency.get("recommendations", [])
-        if recommendations:
-            rec_text = "\n".join([f"• {rec}" for rec in recommendations])
-            viz.append({
-                "id": "strategic_recommendations",
-                "vizType": "text",
-                "title": "Strategic Recommendations",
-                "description": rec_text,
-                "data": {"content": rec_text},
-            })
+    # NOTE: Strategic recommendations removed per design spec
+    
+    # Risk assessment moved to end (after Import Dependency) with smaller font styling
+    dependency = llm_insights.get("import_dependency", {})
+    if dependency and dependency.get("risk_assessment"):
+        viz.append({
+            "id": "risk_assessment",
+            "vizType": "text",
+            "title": "Supply Chain Risk Assessment",
+            "description": dependency.get("risk_assessment"),
+            "data": {
+                "content": dependency.get("risk_assessment"),
+                "style": {"fontSize": "small"}
+            },
+        })
+    
+    # Sourcing recommendation at bottom with smaller font
+    sourcing = llm_insights.get("sourcing_insights", {})
+    if sourcing and sourcing.get("diversification_recommendation"):
+        viz.append({
+            "id": "sourcing_recommendation",
+            "vizType": "text",
+            "title": "Sourcing Strategy Recommendation",
+            "description": sourcing.get("diversification_recommendation"),
+            "data": {
+                "content": sourcing.get("diversification_recommendation"),
+                "style": {"fontSize": "small"}
+            },
+        })
     
     return viz

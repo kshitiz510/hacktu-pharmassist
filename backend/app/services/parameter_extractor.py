@@ -10,11 +10,7 @@ Returns a unified params dict that can be passed to any agent.
 from crewai import LLM
 import json
 
-llm = LLM(
-    model="groq/llama-3.3-70b-versatile",
-    max_tokens=1000,
-    temperature=0.3
-)
+llm = LLM(model="groq/llama-3.3-70b-versatile", max_tokens=1000, temperature=0.3)
 
 UNIFIED_EXTRACTION_PROMPT = """
 You are a pharmaceutical analysis parameter extractor.
@@ -54,41 +50,43 @@ Return ONLY valid JSON object, nothing else:
 def extract_all_parameters(user_prompt: str) -> dict:
     """
     Extract all parameters from user prompt in a single LLM call.
-    
+
     Returns:
         dict with keys: drug, indication, therapy_area, condition, phase, trial_status,
                        search_term, product, country, year, trade_type, jurisdiction
                        + extraction_status and any errors
     """
     prompt = UNIFIED_EXTRACTION_PROMPT.format(user_prompt=user_prompt)
-    
+
     try:
         raw = llm.call(prompt)
-        
+
         if not isinstance(raw, str):
             raw = str(raw)
-        
+
         # Extract JSON from response
         start = raw.find("{")
         end = raw.rfind("}")
-        
+
         if start == -1 or end == -1 or end < start:
             print("No JSON found in response, using defaults")
             return _get_default_parameters()
-        
+
         try:
-            params = json.loads(raw[start:end+1])
+            params = json.loads(raw[start : end + 1])
         except json.JSONDecodeError as e:
             print(f"[PARAM_EXTRACTOR] JSON parse failed: {e}, using defaults")
             return _get_default_parameters()
-        
+
         # Normalize and add defaults
         params = _normalize_parameters(params)
         params["extraction_status"] = "success"
-        
-        print(f"[PARAM_EXTRACTOR] Extracted parameters: {_sanitize_for_logging(params)}")
+
+        print(
+            f"[PARAM_EXTRACTOR] Extracted parameters: {_sanitize_for_logging(params)}"
+        )
         return params
-        
+
     except Exception as e:
         print(f"[PARAM_EXTRACTOR] LLM call failed: {e}, using defaults")
         return _get_default_parameters()
@@ -96,13 +94,15 @@ def extract_all_parameters(user_prompt: str) -> dict:
 
 def _normalize_parameters(params: dict) -> dict:
     """Normalize extracted parameters with defaults and aliases."""
-    
+
     # Clean null values
     def clean_val(val):
-        if val is None or (isinstance(val, str) and val.lower() in ("null", "none", "")):
+        if val is None or (
+            isinstance(val, str) and val.lower() in ("null", "none", "")
+        ):
             return None
         return val
-    
+
     # Extract values
     drug = clean_val(params.get("drug"))
     indication = clean_val(params.get("indication"))
@@ -116,37 +116,37 @@ def _normalize_parameters(params: dict) -> dict:
     year = clean_val(params.get("year"))
     trade_type = clean_val(params.get("trade_type"))
     jurisdiction = clean_val(params.get("jurisdiction"))
-    
+
     # Apply aliases and defaults
     if not indication and condition:
         indication = condition
     if not condition and indication:
         condition = indication
-    
+
     if not search_term:
         search_term = drug or indication or product
-    
+
     if not product:
         product = drug
-    
+
     if not year:
         year = "2024-25"
-    
+
     if not trade_type:
         trade_type = "export"
-    
+
     if not jurisdiction:
         jurisdiction = "US"
-    
+
     # Normalize phase to Title Case
     if phase and phase.lower() != "all":
         if "phase" not in phase.lower():
             phase = f"Phase {phase}".replace("Phase Phase", "Phase")
-    
+
     # Normalize therapy_area to Title Case
     if therapy_area:
         therapy_area = therapy_area.title()
-    
+
     return {
         "drug": drug,
         "indication": indication,

@@ -85,8 +85,13 @@ export function useChatManager() {
         throw new Error("Invalid session returned from server");
       }
 
-      // Return both session and queryType so caller knows if agents ran
-      return { session, queryType: analyzeRes.queryType };
+      // Return session, queryType, and plan so caller can handle planning state
+      return {
+        session,
+        queryType: analyzeRes.queryType,
+        plan: analyzeRes.plan,
+        response: analyzeRes.response,
+      };
     } catch (error) {
       console.error("[ChatManager] Error in createChatFromPrompt:", error);
       throw error;
@@ -112,8 +117,12 @@ export function useChatManager() {
           );
         }
 
-        // Return queryType so caller knows if agents ran
-        return { queryType: response.queryType };
+        // Return queryType and plan so caller can handle planning state
+        return {
+          queryType: response.queryType,
+          plan: response.plan,
+          response: response.response,
+        };
       } finally {
         setIsLoading(false);
       }
@@ -141,6 +150,12 @@ export function useChatManager() {
       }
     } catch (error) {
       console.error("[ChatManager] Error selecting chat:", error);
+    }
+  }, []);
+
+  const updateChatSession = useCallback((session) => {
+    if (session && session.sessionId) {
+      setChats((prev) => prev.map((c) => (c.sessionId === session.sessionId ? session : c)));
     }
   }, []);
 
@@ -174,5 +189,6 @@ export function useChatManager() {
     sendPrompt,
     selectChat,
     deleteChat,
+    updateChatSession,
   };
 }

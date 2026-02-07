@@ -125,22 +125,35 @@ def run_iqvia_agent(
 ) -> dict:
     """
     Run the IQVIA agent.
-    
+
     If search_term/therapy_area are provided by orchestrator, use them directly.
     Otherwise, fall back to LLM extraction for backward compatibility.
+    
+    Returns canonical IQVIA schema with:
+    - summary: Agent summary object for banner
+    - marketSizeUSD: Total market size
+    - cagrPercent: CAGR percentage
+    - topTherapies: Top therapy areas
+    - topArticles: Top 3 articles/content
+    - visualizations: Chart data
+    - suggestedNextPrompts: Follow-up prompts
     """
     print(f"[IQVIA] Starting agent with prompt: {user_prompt}")
 
     # If parameters provided by orchestrator, use them directly
-    if search_term or indication:
-        print(f"[IQVIA] Using orchestrator-provided params: search_term={search_term}, therapy_area={therapy_area}, indication={indication}")
+    if search_term is not None or indication is not None or therapy_area is not None:
+        print(
+            f"[IQVIA] Using orchestrator-provided params: search_term={search_term}, therapy_area={therapy_area}, indication={indication}"
+        )
         llm_search_term = search_term
         llm_therapy_area = therapy_area
         llm_indication = indication
     else:
         # Fallback to LLM extraction for backward compatibility
         print("[IQVIA] No params from orchestrator, falling back to LLM extraction...")
-        llm_search_term, llm_therapy_area, llm_indication = _llm_extract_prompt(user_prompt)
+        llm_search_term, llm_therapy_area, llm_indication = _llm_extract_prompt(
+            user_prompt
+        )
 
     print(
         f"[IQVIA] Final params: search_term={llm_search_term}, therapy_area={llm_therapy_area}, indication={llm_indication}"
@@ -209,8 +222,145 @@ def run_iqvia_agent(
                     start_value=start_val, end_value=end_val, years=years
                 )
 
-        # Build the payload - even if market data is missing, we have infographics
+        # ===== BUILD CANONICAL SCHEMA =====
+        
+        # Extract market size from forecast data (latest value)
+        market_size_usd = None
+        start_market_size = None
+        if forecast_data:
+            # Get the most recent year's value
+            market_size_usd = forecast_data[-1].get("value")
+            start_market_size = forecast_data[0].get("value") if len(forecast_data) > 1 else None
+        
+        # Extract CAGR percentage
+        cagr_percent = cagr_data.get("cagr_percent") if cagr_data else None
+        total_growth_percent = cagr_data.get("total_growth_percent") if cagr_data else None
+        
+        # Build top therapies/competitors from competitive share
+        top_therapies = []
+        market_leader = None
+        if competitive_share.get("data"):
+            for idx, item in enumerate(competitive_share["data"][:5]):
+                share_str = item.get("share", "0%")
+                # Parse share value
+                share_val = 0
+                if share_str:
+                    cleaned = str(share_str).replace('~', '').replace('%', '').strip()
+                    try:
+                        share_val = float(cleaned)
+                    except:
+                        pass
+                
+                therapy_entry = {
+                    "therapy": item.get("company", "Unknown"),
+                    "marketUSD": item.get("market_value"),
+                    "cagr": item.get("cagr"),
+                    "share": share_str,
+                    "shareValue": share_val
+                }
+                top_therapies.append(therapy_entry)
+                
+                # Track market leader (first entry with highest share)
+                if idx == 0:
+                    market_leader = therapy_entry
+        
+        # Build top articles from infographics (limit to 5)
+        top_articles = []
+        for infographic in infographics[:5]:
+            top_articles.append({
+                "title": infographic.get("title", "Market Analysis"),
+                "source": "Statista",
+                "publishedDate": infographic.get("date"),
+                "snippet": infographic.get("subtitle", "")[:200] if infographic.get("subtitle") else infographic.get("description", "")[:200] if infographic.get("description") else "",
+                "url": infographic.get("url", ""),
+                "imageUrl": infographic.get("content", ""),
+                "premium": infographic.get("premium", False),
+                "contentType": infographic.get("contentType", "infographic")
+            })
+        
+        # ===== GENERATE INTELLIGENT SUMMARY =====
+        has_data = bool(market_size_usd or top_articles or forecast_data)
+        
+        # Determine market attractiveness
+        market_attractiveness = "Unclear"
+        if cagr_percent:
+            if cagr_percent > 10:
+                market_attractiveness = "Yes — High Growth"
+            elif cagr_percent > 5:
+                market_attractiveness = "Yes — Moderate Growth"
+            elif cagr_percent > 0:
+                market_attractiveness = "Possibly — Stable Market"
+            else:
+                market_attractiveness = "Caution — Declining"
+        elif market_size_usd:
+            market_attractiveness = "Yes — Market Exists"
+        elif top_articles:
+            market_attractiveness = "Unclear — Research Available"
+        
+        # Build comprehensive explainers
+        explainers = []
+        
+        # Market size context
+        if market_size_usd:
+            if isinstance(market_size_usd, (int, float)):
+                if market_size_usd >= 50:
+                    explainers.append(f"Large market: ${market_size_usd:.1f}B (significant commercial opportunity)")
+                elif market_size_usd >= 10:
+                    explainers.append(f"Mid-size market: ${market_size_usd:.1f}B (viable commercial opportunity)")
+                else:
+                    explainers.append(f"Niche market: ${market_size_usd:.1f}B (targeted opportunity)")
+            else:
+                explainers.append(f"Market size: {market_size_usd}")
+        
+        # Growth trajectory
+        if cagr_percent:
+            growth_desc = "rapid" if cagr_percent > 15 else "strong" if cagr_percent > 10 else "healthy" if cagr_percent > 5 else "moderate" if cagr_percent > 0 else "declining"
+            explainers.append(f"Growth: {cagr_percent:.1f}% CAGR ({growth_desc} trajectory)")
+        
+        # Competitive landscape
+        if market_leader:
+            leader_share = market_leader.get("shareValue", 0)
+            if leader_share > 50:
+                explainers.append(f"Concentrated market: {market_leader['therapy']} dominates with {market_leader['share']}")
+            elif leader_share > 30:
+                explainers.append(f"Competitive market: {market_leader['therapy']} leads with {market_leader['share']}")
+            else:
+                explainers.append(f"Fragmented market: {market_leader['therapy']} has {market_leader['share']} (entry opportunities exist)")
+        
+        # Research availability
+        if top_articles:
+            explainers.append(f"{len(infographics)} market research reports identified from Statista")
+        
+        summary = {
+            "researcherQuestion": "Is this market worth exploring commercially?",
+            "answer": market_attractiveness,
+            "explainers": explainers
+        }
+        
+        # Generate intelligent suggested next prompts based on context
+        suggested_next_prompts = [
+            {"prompt": f"Show clinical trials for {query_term}"},
+            {"prompt": f"Analyze patent landscape for {query_term}"},
+        ]
+        
+        # Add context-aware suggestions
+        if therapy:
+            suggested_next_prompts.append({"prompt": f"What are the top drugs in {therapy}?"})
+        if market_leader:
+            suggested_next_prompts.append({"prompt": f"Compare {query_term} with {market_leader['therapy']}"})
+        else:
+            suggested_next_prompts.append({"prompt": f"Who are the key competitors in {query_term} market?"})
+
+        # Build the comprehensive payload
         payload = {
+            "summary": summary,
+            "marketSizeUSD": market_size_usd,
+            "startMarketSize": start_market_size,
+            "cagrPercent": cagr_percent,
+            "totalGrowthPercent": total_growth_percent,
+            "marketLeader": market_leader,
+            "topTherapies": top_therapies,
+            "topArticles": top_articles,
             "market_forecast": market_forecast,
             "competitive_share": competitive_share,
             "input": {
@@ -221,6 +371,13 @@ def run_iqvia_agent(
             "cagr_analysis": cagr_data,
             "infographics": infographics,
             "query_used": infographics_data.get("query_used", query_term),
+            "suggestedNextPrompts": suggested_next_prompts,
+            "dataAvailability": {
+                "hasMarketForecast": bool(forecast_data),
+                "hasCompetitiveShare": bool(competitive_share.get("data")),
+                "hasInfographics": bool(infographics),
+                "hasCAGR": bool(cagr_data),
+            }
         }
 
         return {

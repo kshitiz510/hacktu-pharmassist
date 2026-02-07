@@ -57,7 +57,6 @@ PHARMA_HSN_CODES = {
     "ciprofloxacin": "29419090",
     "amlodipine": "29339990",
     "losartan": "29339990",
-    
     # Formulations & finished drugs
     "medicines": "30049099",
     "pharmaceuticals": "30049099",
@@ -69,13 +68,11 @@ PHARMA_HSN_CODES = {
     "vaccines": "30022090",
     "insulin": "30043100",
     "antibiotics": "30041090",
-    
     # Generic categories
     "api": "29419090",
     "bulk drugs": "29419090",
     "active pharmaceutical ingredients": "29419090",
     "pharmaceutical intermediates": "29339990",
-    
     # Default for general pharma queries
     "default": "30049099",
 }
@@ -88,6 +85,37 @@ def _get_hsn_code(query: str) -> str:
         if keyword in query_lower:
             return code
     return PHARMA_HSN_CODES["default"]
+
+
+def _build_exim_summary(trade_volume: dict, top_partners: list, trade_type: str, product: str) -> dict:
+    """Build canonical summary object for the banner."""
+    total_value = trade_volume.get("total_value_usd_million", 0)
+    yoy_growth = trade_volume.get("yoy_growth_percent", 0)
+    
+    has_data = total_value > 0 or len(top_partners) > 0
+    is_growing = yoy_growth > 5 if yoy_growth else False
+    
+    if has_data:
+        summary_answer = "Yes" if is_growing else "Stable"
+    else:
+        summary_answer = "No"
+    
+    summary = {
+        "researcherQuestion": f"Is there active {trade_type} trade for this product?",
+        "answer": summary_answer,
+        "explainers": []
+    }
+    
+    if total_value:
+        summary["explainers"].append(f"Trade value: ${total_value:,.0f}M")
+    if yoy_growth is not None:
+        summary["explainers"].append(f"YoY growth: {yoy_growth:.1f}%")
+    if top_partners:
+        top_partner = top_partners[0].get("name", "Unknown") if top_partners else None
+        if top_partner:
+            summary["explainers"].append(f"Top partner: {top_partner}")
+    
+    return summary
 
 
 def _llm_extract_exim_params(
@@ -159,7 +187,9 @@ Return ONLY a JSON object, nothing else:"""
     return product, year, country, trade_type
 
 
-def _llm_generate_exim_data(product: str, year: str, country: str | None, trade_type: str) -> dict:
+def _llm_generate_exim_data(
+    product: str, year: str, country: str | None, trade_type: str
+) -> dict:
     """
     Generate EXIM trade data using LLM when API data is unavailable.
     Returns structured data for Trade Volume, Sourcing Insights, and Import Dependency.
@@ -233,49 +263,59 @@ Return ONLY the JSON object, no additional text."""
     start = raw.find("{")
     end = raw.rfind("}")
     if start == -1 or end == -1 or end < start:
-        print(f"[EXIM] No JSON found in LLM fallback response")
+        print("[EXIM] No JSON found in LLM fallback response")
         return None
 
     try:
         data = json.loads(raw[start : end + 1])
-        print(f"[EXIM] LLM fallback generated data successfully")
+        print("[EXIM] LLM fallback generated data successfully")
         return data
     except json.JSONDecodeError as e:
         print(f"[EXIM] Failed to parse LLM fallback JSON: {e}")
         return None
 
 
-def _build_payload_from_llm_data(llm_data: dict, product: str, year: str, country: str | None, trade_type: str) -> dict:
+def _build_payload_from_llm_data(
+    llm_data: dict, product: str, year: str, country: str | None, trade_type: str
+) -> dict:
     """Convert LLM-generated data into the standard payload format."""
-    
+
     trade_volume = llm_data.get("trade_volume", {})
     sourcing = llm_data.get("sourcing_insights", {})
     dependency = llm_data.get("import_dependency", {})
-    
+
     # Build top_partners from trade_volume data
     top_partners = []
     for exporter in trade_volume.get("top_exporters", []):
-        top_partners.append({
-            "name": exporter.get("country", "Unknown"),
-            "current_value": exporter.get("value", 0),
-            "previous_value": exporter.get("value", 0) / (1 + exporter.get("growth", 0) / 100) if exporter.get("growth", 0) != -100 else 0,
-            "growth": exporter.get("growth", 0),
-            "share": exporter.get("share", 0),
-        })
-    
+        top_partners.append(
+            {
+                "name": exporter.get("country", "Unknown"),
+                "current_value": exporter.get("value", 0),
+                "previous_value": exporter.get("value", 0)
+                / (1 + exporter.get("growth", 0) / 100)
+                if exporter.get("growth", 0) != -100
+                else 0,
+                "growth": exporter.get("growth", 0),
+                "share": exporter.get("share", 0),
+            }
+        )
+
     # Build rows for table display
     rows = []
     for i, partner in enumerate(top_partners, 1):
-        rows.append({
-            "S.No.": str(i),
-            "Country": partner["name"],
-            "2024 - 2025": str(round(partner["current_value"], 2)),
-            "2023 - 2024": str(round(partner["previous_value"], 2)),
-            "%Share": str(round(partner["share"], 2)),
-            "%Growth": str(round(partner["growth"], 2)),
-        })
-    
+        rows.append(
+            {
+                "S.No.": str(i),
+                "Country": partner["name"],
+                "2024 - 2025": str(round(partner["current_value"], 2)),
+                "2023 - 2024": str(round(partner["previous_value"], 2)),
+                "%Share": str(round(partner["share"], 2)),
+                "%Growth": str(round(partner["growth"], 2)),
+            }
+        )
+
     return {
+        "summary": _build_exim_summary(trade_volume, top_partners, trade_type, product),
         "input": {
             "product": product,
             "hs_code": _get_hsn_code(product),
@@ -288,7 +328,14 @@ def _build_payload_from_llm_data(llm_data: dict, product: str, year: str, countr
             "totals": {
                 "Total": str(trade_volume.get("total_value_usd_million", 0)),
             },
-            "columns": ["S.No.", "Country", "2023 - 2024", "%Share", "2024 - 2025", "%Growth"],
+            "columns": [
+                "S.No.",
+                "Country",
+                "2023 - 2024",
+                "%Share",
+                "2024 - 2025",
+                "%Growth",
+            ],
             "total_records": len(rows),
         },
         "analysis": {
@@ -317,12 +364,16 @@ def _build_payload_from_llm_data(llm_data: dict, product: str, year: str, countr
                 "primary_sources": sourcing.get("primary_sources", []),
                 "supply_concentration": sourcing.get("supply_concentration", "Medium"),
                 "hhi_index": sourcing.get("hhi_index", 0),
-                "diversification_recommendation": sourcing.get("diversification_recommendation", ""),
+                "diversification_recommendation": sourcing.get(
+                    "diversification_recommendation", ""
+                ),
                 "description": sourcing.get("description", ""),
             },
             "import_dependency": {
                 "critical_dependencies": dependency.get("critical_dependencies", []),
-                "total_import_value": dependency.get("total_import_value_usd_million", 0),
+                "total_import_value": dependency.get(
+                    "total_import_value_usd_million", 0
+                ),
                 "dependency_ratio": dependency.get("dependency_ratio", 0),
                 "risk_assessment": dependency.get("risk_assessment", ""),
                 "recommendations": dependency.get("recommendations", []),
@@ -331,6 +382,11 @@ def _build_payload_from_llm_data(llm_data: dict, product: str, year: str, countr
             "summary_description": llm_data.get("summary_description", ""),
         },
         "data_source": "LLM-Generated (API data unavailable)",
+        "suggestedNextPrompts": [
+            {"prompt": f"Show clinical trials for {product}"},
+            {"prompt": f"Analyze patents for {product}"},
+            {"prompt": f"Compare market size for {product}"}
+        ],
     }
 
 
@@ -344,15 +400,17 @@ def run_exim_agent(
 ) -> dict:
     """
     Run the EXIM agent.
-    
+
     If product/year/country/trade_type are provided by orchestrator, use them directly.
     Otherwise, fall back to LLM extraction for backward compatibility.
     """
     print(f"[EXIM] Starting agent with prompt: {user_prompt}")
 
     # If parameters provided by orchestrator, use them directly
-    if product:
-        print(f"[EXIM] Using orchestrator-provided params: product={product}, year={year}, country={country}, trade_type={trade_type}")
+    if product is not None or year is not None or country is not None or trade_type is not None:
+        print(
+            f"[EXIM] Using orchestrator-provided params: product={product}, year={year}, country={country}, trade_type={trade_type}"
+        )
         llm_product = product
         llm_year = year or "2024-25"
         llm_country = country
@@ -360,7 +418,9 @@ def run_exim_agent(
     else:
         # Fallback to LLM extraction for backward compatibility
         print("[EXIM] No params from orchestrator, falling back to LLM extraction...")
-        llm_product, llm_year, llm_country, llm_trade_type = _llm_extract_exim_params(user_prompt)
+        llm_product, llm_year, llm_country, llm_trade_type = _llm_extract_exim_params(
+            user_prompt
+        )
 
     print(
         f"[EXIM] Final params: product={llm_product}, year={llm_year}, country={llm_country}, trade_type={llm_trade_type}"
@@ -374,34 +434,85 @@ def run_exim_agent(
 
     # Get HSN code based on product
     hs_code = _get_hsn_code(prod)
-    
+
     print(f"[EXIM] Using HSN code: {hs_code} for product: {prod}")
 
     try:
         # Fetch trade data from local data source
-        print(f"[EXIM] Fetching trade data: year={yr}, hs_code={hs_code}, trade_type={ttype}")
-        
+        print(
+            f"[EXIM] Fetching trade data: year={yr}, hs_code={hs_code}, trade_type={ttype}"
+        )
+
         trade_data = _fetch_exim_data_impl(
-            drug_name=prod,
-            hs_code=hs_code,
-            country=cntry
+            drug_name=prod, hs_code=hs_code, country=cntry
         )
 
         # Check if API returned valid data
         api_success = "error" not in trade_data and trade_data.get("data") is not None
+        
+        # Initialize variables outside if block
+        rows = []
+        totals = {}
+        columns = []
 
         if api_success:
-            print(f"[EXIM] API returned valid data")
+            print("[EXIM] API returned valid data")
             rows = trade_data.get("rows", [])
             totals = trade_data.get("totals", {})
             columns = trade_data.get("columns", [])
 
             print(f"[EXIM] Found {len(rows)} trade records")
 
+            # If no records found, use LLM fallback
+            if len(rows) == 0:
+                print("[EXIM] No trade records found in API, using LLM fallback")
+                api_success = False
+        else:
+            print("[EXIM] API returned error or no data, using LLM fallback")
+
+        if api_success:
             # Process trade data for analysis
-            processed_data = _process_trade_data(rows, columns, prod, hs_code, yr, ttype)
+            processed_data = _process_trade_data(
+                rows, columns, prod, hs_code, yr, ttype
+            )
+
+            # Build canonical summary object for banner
+            total_value = processed_data.get("total_value_current", 0)
+            yoy_growth = processed_data.get("yoy_growth", 0)
+            top_partners = processed_data.get("top_partners", [])
+            
+            has_data = total_value > 0 or len(rows) > 0
+            is_growing = yoy_growth > 5 if yoy_growth else False
+            
+            if has_data:
+                summary_answer = "Yes" if is_growing else "Stable"
+            else:
+                summary_answer = "No"
+            
+            summary = {
+                "researcherQuestion": f"Is there active {ttype} trade for this product?",
+                "answer": summary_answer,
+                "explainers": []
+            }
+            
+            if total_value:
+                summary["explainers"].append(f"Trade value: ${total_value:,.0f}" if isinstance(total_value, (int, float)) else f"Trade value: {total_value}")
+            if yoy_growth is not None:
+                summary["explainers"].append(f"YoY growth: {yoy_growth:.1f}%")
+            if top_partners:
+                top_partner = top_partners[0].get("country", "Unknown") if top_partners else None
+                if top_partner:
+                    summary["explainers"].append(f"Top partner: {top_partner}")
+            
+            # Generate suggested next prompts
+            suggested_next_prompts = [
+                {"prompt": f"Show clinical trials for {prod}"},
+                {"prompt": f"Analyze patents for {prod}"},
+                {"prompt": f"Compare market size for {prod}"}
+            ]
 
             payload = {
+                "summary": summary,
                 "input": {
                     "product": prod,
                     "hs_code": hs_code,
@@ -417,6 +528,7 @@ def run_exim_agent(
                 },
                 "analysis": processed_data,
                 "data_source": "India TradeStats API",
+                "suggestedNextPrompts": suggested_next_prompts,
             }
 
             return {
@@ -427,35 +539,46 @@ def run_exim_agent(
         else:
             # API failed - use LLM fallback
             print(f"[EXIM] API data unavailable, using LLM fallback for: {prod}")
-            
+
             llm_data = _llm_generate_exim_data(prod, yr, cntry, ttype)
-            
+
             if llm_data:
+                print("[EXIM] LLM successfully generated trade data")
                 payload = _build_payload_from_llm_data(llm_data, prod, yr, cntry, ttype)
-                
+
                 return {
                     "status": "success",
                     "data": payload,
                     "visualizations": build_exim_visualizations(payload),
                 }
             else:
+                print("[EXIM] LLM returned None or empty data")
                 return {
                     "status": "error",
                     "message": f"No trade data available for {prod} and LLM fallback failed",
                 }
+    except Exception as llm_error:
+        print(f"[EXIM] LLM fallback failed with error: {llm_error}")
+        import traceback
+        traceback.print_exc()
+        return {
+            "status": "error",
+            "message": f"LLM fallback error: {str(llm_error)}",
+        }
 
     except Exception as e:
         print(f"[EXIM] Error: {str(e)}, attempting LLM fallback")
         import traceback
+
         traceback.print_exc()
-        
+
         # Try LLM fallback on exception
         try:
             llm_data = _llm_generate_exim_data(prod, yr, cntry, ttype)
-            
+
             if llm_data:
                 payload = _build_payload_from_llm_data(llm_data, prod, yr, cntry, ttype)
-                
+
                 return {
                     "status": "success",
                     "data": payload,
@@ -463,66 +586,94 @@ def run_exim_agent(
                 }
         except Exception as fallback_error:
             print(f"[EXIM] LLM fallback also failed: {fallback_error}")
-        
+
         return {"status": "error", "message": str(e)}
 
 
-def _process_trade_data(rows: list, columns: list, product: str, hs_code: str, year: str, trade_type: str) -> dict:
+def _process_trade_data(
+    rows: list, columns: list, product: str, hs_code: str, year: str, trade_type: str
+) -> dict:
     """Process raw trade data into structured analysis."""
-    
+
     # Parse year columns from headers
     # Typical columns: ['S.No.', 'HSCode', 'Commodity', 'Country', '2023 - 2024', '%Share', '2024 - 2025', '%Growth']
     # or: ['S.No.', 'HSCode', 'Commodity', '2023 - 2024', '%Share', '2024 - 2025', '%Growth']
-    
+
     current_year_col = None
     previous_year_col = None
     growth_col = None
     share_col = None
     country_col = None
-    
+
     for col in columns:
         col_lower = col.lower()
-        if '2024' in col and '2025' in col:
+        if "2024" in col and "2025" in col:
             current_year_col = col
-        elif '2023' in col and '2024' in col:
+        elif "2023" in col and "2024" in col:
             previous_year_col = col
-        elif 'growth' in col_lower:
+        elif "growth" in col_lower:
             growth_col = col
-        elif 'share' in col_lower:
+        elif "share" in col_lower:
             share_col = col
-        elif 'country' in col_lower:
+        elif "country" in col_lower:
             country_col = col
-    
+
     # Calculate totals and summaries
     total_current = 0.0
     total_previous = 0.0
     top_partners = []
-    
+
     for row in rows[:20]:  # Top 20 trading partners
         try:
-            current_val = float(row.get(current_year_col, '0').replace(',', '') or '0') if current_year_col else 0
-            previous_val = float(row.get(previous_year_col, '0').replace(',', '') or '0') if previous_year_col else 0
-            growth = float(row.get(growth_col, '0').replace(',', '') or '0') if growth_col else 0
-            share = float(row.get(share_col, '0').replace(',', '') or '0') if share_col else 0
-            
-            partner_name = row.get(country_col) or row.get('Country') or row.get('Commodity', 'Unknown')
-            
-            top_partners.append({
-                "name": partner_name,
-                "current_value": current_val,
-                "previous_value": previous_val,
-                "growth": growth,
-                "share": share,
-            })
-            
+            current_val = (
+                float(row.get(current_year_col, "0").replace(",", "") or "0")
+                if current_year_col
+                else 0
+            )
+            previous_val = (
+                float(row.get(previous_year_col, "0").replace(",", "") or "0")
+                if previous_year_col
+                else 0
+            )
+            growth = (
+                float(row.get(growth_col, "0").replace(",", "") or "0")
+                if growth_col
+                else 0
+            )
+            share = (
+                float(row.get(share_col, "0").replace(",", "") or "0")
+                if share_col
+                else 0
+            )
+
+            partner_name = (
+                row.get(country_col)
+                or row.get("Country")
+                or row.get("Commodity", "Unknown")
+            )
+
+            top_partners.append(
+                {
+                    "name": partner_name,
+                    "current_value": current_val,
+                    "previous_value": previous_val,
+                    "growth": growth,
+                    "share": share,
+                }
+            )
+
             total_current += current_val
             total_previous += previous_val
         except (ValueError, TypeError):
             continue
-    
+
     # Calculate overall growth
-    overall_growth = ((total_current - total_previous) / total_previous * 100) if total_previous > 0 else 0
-    
+    overall_growth = (
+        ((total_current - total_previous) / total_previous * 100)
+        if total_previous > 0
+        else 0
+    )
+
     return {
         "summary": {
             "product": product,

@@ -137,23 +137,29 @@ def run_clinical_agent(
 ) -> dict:
     """
     Run the clinical agent.
-    
+
     If drug_name/condition are provided by orchestrator, use them directly.
     Otherwise, fall back to LLM extraction for backward compatibility.
     """
     print(f"[CLINICAL] Starting agent with prompt: {user_prompt}")
 
     # If parameters provided by orchestrator, use them directly
-    if drug_name and condition:
-        print(f"[CLINICAL] Using orchestrator-provided params: drug={drug_name}, condition={condition}, phase={phase}, status={status}")
+    if drug_name is not None or condition is not None or phase is not None or status is not None:
+        print(
+            f"[CLINICAL] Using orchestrator-provided params: drug={drug_name}, condition={condition}, phase={phase}, status={status}"
+        )
         llm_drug = drug_name
         llm_condition = condition
         llm_phase = phase
         llm_status = status
     else:
         # Fallback to LLM extraction for backward compatibility
-        print("[CLINICAL] No params from orchestrator, falling back to LLM extraction...")
-        llm_drug, llm_condition, llm_phase, llm_status = _llm_extract_prompt(user_prompt)
+        print(
+            "[CLINICAL] No params from orchestrator, falling back to LLM extraction..."
+        )
+        llm_drug, llm_condition, llm_phase, llm_status = _llm_extract_prompt(
+            user_prompt
+        )
 
     print(
         f"[CLINICAL] Final params: drug={llm_drug}, condition={llm_condition}, phase={llm_phase}, status={llm_status}"
@@ -190,7 +196,44 @@ def run_clinical_agent(
         print(f"[CLINICAL] Found {trials.get('total_trials', 0)} trials")
         analysis = analyze_fn(trials)
 
+        # Build canonical summary object for banner
+        total_trials = trials.get("total_trials", 0)
+        phase_counts = analysis.get("phase_counts", {}) if analysis else {}
+        phase3_count = phase_counts.get("Phase 3", 0) + phase_counts.get("PHASE3", 0)
+        
+        has_trials = total_trials > 0
+        has_late_stage = phase3_count > 0
+        
+        if has_trials:
+            summary_answer = "Yes" if has_late_stage else "Developing"
+        else:
+            summary_answer = "No"
+        
+        summary = {
+            "researcherQuestion": "Is there clinical evidence for this drug-disease pair?",
+            "answer": summary_answer,
+            "explainers": []
+        }
+        
+        if total_trials > 0:
+            summary["explainers"].append(f"{total_trials} trials found")
+        if phase3_count > 0:
+            summary["explainers"].append(f"{phase3_count} in Phase 3")
+        if analysis and analysis.get("top_sponsors"):
+            top_sponsor = analysis["top_sponsors"][0] if analysis["top_sponsors"] else None
+            if top_sponsor:
+                summary["explainers"].append(f"Lead: {top_sponsor.get('sponsor', 'Unknown')}")
+        
+        # Generate suggested next prompts
+        query_term = drug or cond
+        suggested_next_prompts = [
+            {"prompt": f"Check patent status for {query_term}"},
+            {"prompt": f"Show market size for {query_term}"},
+            {"prompt": f"Find web intelligence for {query_term} safety concerns"}
+        ]
+
         payload = {
+            "summary": summary,
             "input": {
                 "drug_name": drug,
                 "condition": cond,
@@ -199,6 +242,7 @@ def run_clinical_agent(
             },
             "trials": trials,
             "analysis": analysis,
+            "suggestedNextPrompts": suggested_next_prompts,
         }
 
         return {

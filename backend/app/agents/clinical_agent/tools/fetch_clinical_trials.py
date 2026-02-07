@@ -81,7 +81,18 @@ def fetch_clinical_trials(
 
         # Prepare trial list with key fields for display
         trials_list = []
+        all_interventions = set()  # Track all unique drug interventions for repurposing
+        
         for trial in result["trials"]:  # Return all trials
+            # Extract interventions for this trial
+            trial_interventions = trial.get("interventions", [])
+            for intervention in trial_interventions:
+                if intervention.get("type") == "DRUG" and intervention.get("name"):
+                    drug_name_lower = intervention["name"].lower()
+                    # Don't add the search drug itself
+                    if drug_name and drug_name.lower() != drug_name_lower:
+                        all_interventions.add(intervention["name"])
+            
             trials_list.append(
                 {
                     "nct_id": trial.get("nct_id"),
@@ -91,8 +102,12 @@ def fetch_clinical_trials(
                     "sponsor": trial.get("sponsors", {}).get("lead", {}).get("name"),
                     "enrollment": trial.get("enrollment", {}).get("count"),
                     "locations_count": len(trial.get("locations", [])),
+                    "interventions": [i.get("name") for i in trial_interventions if i.get("type") == "DRUG"],
                 }
             )
+
+        # Identify other drugs used in the same condition (repurposing candidates)
+        other_drugs_used = sorted(list(all_interventions))[:10]  # Limit to 10 most common
 
         return {
             "drug_name": drug_name,
@@ -110,6 +125,7 @@ def fetch_clinical_trials(
                 for item in result["aggregates"]["sponsor_counts"][:5]
             ],
             "enrollment_summary": result["aggregates"]["enrollment"],
+            "other_drugs_used": other_drugs_used,  # Cross-references for repurposing
             "data_source": "ClinicalTrials.gov v2 API (Live)",
         }
     except ValueError as e:

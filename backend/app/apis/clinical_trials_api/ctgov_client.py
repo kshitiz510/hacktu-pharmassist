@@ -28,7 +28,6 @@ from typing import Any, Dict, Iterable, List, Optional
 
 import requests
 
-
 DEFAULT_BASE_URL = "https://clinicaltrials.gov/api/v2"
 
 # Default field projection focused on metadata + design + site footprint

@@ -401,7 +401,7 @@ def verify_patent_blocking(
             "confidence": "HIGH",
             "status": "EXPIRED",
             "hasContinuations": scraped.get("hasContinuations", False),
-            "evidence": {"note": "Patent has expired"},
+            # Removed evidence field from output
         }
     
     # Step 4: Analyze claim with LLM
@@ -416,6 +416,8 @@ def verify_patent_blocking(
     blocking_severity = SEVERITY_MAP.get(claim_type, "WEAK")
     
     # Step 6: Build final result
+    # NOTE: Evidence is kept internally for audit/debugging but NOT included in return
+    # to avoid exposing verbose claim excerpts in the UI
     result = {
         "patent": patent_number,
         "url": scraped.get("url"),
@@ -432,7 +434,8 @@ def verify_patent_blocking(
         "confidence": claim_analysis.get("confidence", "LOW"),
         "hasContinuations": scraped.get("hasContinuations", False),
         "cpcCodes": scraped.get("cpcCodes", []),
-        "evidence": {
+        # Removed: "evidence" field - kept only for internal audit
+        "_auditEvidence": {
             "claimExcerpt": (scraped.get("claim1") or "")[:500],
             "reasoning": claim_analysis.get("reasoning", ""),
         },

@@ -3,17 +3,23 @@ FTO Output Formatter
 
 Transforms raw patent analysis data into human-friendly, UI-ready output.
 
+═══════════════════════════════════════════════════════════════════════════════
+OUTPUT FORMAT CHANGES (Jan 2026):
+- All keys use camelCase (no underscores)
+- "freedomDate" renamed to "ftoDate" (YYYY-MM-DD format)
+- "evidence" field REMOVED from blockingPatents
+- "confidence" field REMOVED from blockingPatents  
+- Per-patent "riskBand" added: CLEAR/LOW/MODERATE/HIGH/CRITICAL
+- normalizedRiskInternal is for INTERNAL SORTING ONLY (not displayed)
+- blockingPatentsSummary includes claimTypeCounts
+- pieData ensures labels are strings and counts are integers (no NaN)
+═══════════════════════════════════════════════════════════════════════════════
+
 RESPONSIBILITIES:
 - Humanize field names (snake_case → Title Case)
-- Format patent entries for display (normalizedRisk, riskBand, reason)
+- Format patent entries for display (riskBand, reason, NO evidence/confidence)
 - Build visualization payload for frontend charts
 - Generate multi-layer summary texts (executive, business, legal)
-
-REFINEMENTS (v2):
-- Remove internal scoring artifacts (score, confidence, rawScore)
-- Normalize all risk values to 0-100 integers
-- Add sourceUrl (Google Patents link) for traceability
-- Add requiresManualReview flag for uncertain patents
 """
 
 from __future__ import annotations
@@ -21,7 +27,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from .normalizer import get_band_color, get_band_description, PER_PATENT_CAP
+from .normalizer import get_band_color, get_band_description, PER_PATENT_CAP, normalize_patent_risk
 
 
 # ============================================================================
@@ -98,6 +104,10 @@ def format_patent_entry(verification: Dict[str, Any]) -> Dict[str, Any]:
     """
     Format a single patent verification result for display.
     
+    ═══════════════════════════════════════════════════════════════════════════
+    OUTPUT SCHEMA (Jan 2026 - Canonical Format):
+    ═══════════════════════════════════════════════════════════════════════════
+    
     Input (verification object from verify_patent_blocking):
         {
             "patent": "US12345678B2",
@@ -110,22 +120,24 @@ def format_patent_entry(verification: Dict[str, Any]) -> Dict[str, Any]:
             "riskScore": 12  # if scored
         }
     
-    Output (display-friendly format - v2 REFINED):
+    Output (display-friendly format - CANONICAL):
         {
-            "patent": "US12345678B2",
-            "title": "Metformin compositions...",
-            "assignee": "Company X",
-            "status": "Blocking",
-            "claimType": "Composition",
-            "expectedExpiry": "2039-01-31",
-            "normalizedRisk": 85,        # NEW: 0-100 scale
-            "riskBand": "CRITICAL",      # NEW: LOW/MODERATE/HIGH/CRITICAL
-            "reason": "Composition claim covers API; blocks core use.",
-            "requiresManualReview": false, # NEW: flags uncertain patents
-            "sourceUrl": "https://patents.google.com/patent/US12345678B2"  # NEW
+            "patentNumber": "US12345678B2",   # Renamed from "patent"
+            "claimType": "Composition",       # Title case
+            "expiry": "2039-01-31",           # Renamed from expectedExpiry, YYYY-MM-DD
+            "riskBand": "CRITICAL",           # CLEAR/LOW/MODERATE/HIGH/CRITICAL
+            "reason": "Composition claim covers API",  # Short 6-12 words
+            "hasContinuations": true
         }
     
-    REMOVED from v1: score, confidence (internal artifacts)
+    REMOVED from output:
+    - evidence (not needed in UI)
+    - confidence (internal only)
+    - normalizedRisk (internal sorting only - kept in separate field if needed)
+    - sourceUrl (moved to expandedResults only)
+    - requiresManualReview (internal flag)
+    - title, assignee (moved to expandedResults only)
+    ═══════════════════════════════════════════════════════════════════════════
     """
     patent_num = verification.get("patent", "Unknown")
     blocks_use = verification.get("blocksUse")
@@ -134,73 +146,101 @@ def format_patent_entry(verification: Dict[str, Any]) -> Dict[str, Any]:
     expiry = verification.get("expectedExpiry")
     raw_score = verification.get("riskScore", 0)
     
-    # Determine status
+    # Determine status for internal logic
     if verification.get("status") == "EXPIRED" or _is_expired(expiry):
         status = "Expired"
     else:
         status = STATUS_LABELS.get(blocks_use, "Uncertain")
     
-    # Normalize risk score to 0-100 scale for this patent
-    normalized_risk, risk_band = _normalize_patent_risk(raw_score, blocks_use, status)
+    # Get riskBand using normalized score
+    risk_result = normalize_patent_risk(raw_score, blocks_use, status)
+    risk_band = risk_result["riskBand"]
     
-    # Build human-readable reason
-    reason = _build_reason(blocks_use, claim_type, has_continuations, expiry, verification.get("error"))
+    # Build SHORT human-readable reason (6-12 words per spec)
+    reason = _build_short_reason(blocks_use, claim_type, has_continuations)
     
-    # Flag for manual review
-    requires_manual_review = blocks_use is None or status == "Uncertain"
+    # Format expiry to YYYY-MM-DD (required format)
+    formatted_expiry = _format_date_strict(expiry)
     
-    # Build Google Patents source URL
-    source_url = _build_source_url(patent_num)
+    # INFO: Removed evidence field from blocking patents per spec
+    print(f"[FORMATTER] INFO: Removed evidence field from patent {patent_num}")
     
     return {
-        "patent": patent_num,
+        "patentNumber": patent_num,
+        "claimType": CLAIM_TYPE_LABELS.get(claim_type, claim_type),
+        "expiry": formatted_expiry,
+        "riskBand": risk_band,
+        "reason": reason,
+        "hasContinuations": has_continuations,
+    }
+
+
+def format_patent_entry_expanded(verification: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Format patent for expandedResults (includes more detail).
+    Used for nonBlockingPatents and internal audit data.
+    """
+    patent_num = verification.get("patent", "Unknown")
+    blocks_use = verification.get("blocksUse")
+    claim_type = verification.get("claimType", "OTHER")
+    has_continuations = verification.get("hasContinuations", False)
+    expiry = verification.get("expectedExpiry")
+    raw_score = verification.get("riskScore", 0)
+    
+    if verification.get("status") == "EXPIRED" or _is_expired(expiry):
+        status = "Expired"
+    else:
+        status = STATUS_LABELS.get(blocks_use, "Uncertain")
+    
+    risk_result = normalize_patent_risk(raw_score, blocks_use, status)
+    
+    return {
+        "patentNumber": patent_num,
         "title": verification.get("title", "Unknown Title"),
         "assignee": verification.get("assignee", "Unknown"),
-        "status": status,
         "claimType": CLAIM_TYPE_LABELS.get(claim_type, claim_type),
-        "expectedExpiry": _format_date(expiry),
-        "normalizedRisk": normalized_risk,  # 0-100 integer
-        "riskBand": risk_band,              # LOW/MODERATE/HIGH/CRITICAL
-        "reason": reason,
-        "requiresManualReview": requires_manual_review,
-        "sourceUrl": source_url,
+        "expiry": _format_date_strict(expiry),
+        "riskBand": risk_result["riskBand"],
+        "reason": _build_short_reason(blocks_use, claim_type, has_continuations),
+        "hasContinuations": has_continuations,
+        "status": status,
     }
+
+
+def _build_short_reason(
+    blocks_use: Optional[bool],
+    claim_type: str,
+    has_continuations: bool,
+) -> str:
+    """Build SHORT human-readable reason (6-12 words per spec)."""
+    # Short claim type explanations
+    claim_reasons = {
+        "COMPOSITION": "Composition claim covers API",
+        "METHOD_OF_TREATMENT": "Method claim covers therapeutic use",
+        "FORMULATION": "Formulation claim covers delivery",
+        "PROCESS": "Process claim covers manufacturing",
+        "OTHER": "Claim scope requires analysis",
+    }
+    
+    base = claim_reasons.get(claim_type, "Claim requires analysis")
+    
+    if blocks_use is True:
+        if has_continuations:
+            return f"{base}; continuations may extend"
+        return base
+    elif blocks_use is False:
+        return "Does not block intended use"
+    else:
+        return "Blocking status uncertain; review needed"
 
 
 def _normalize_patent_risk(raw_score: float, blocks_use: Optional[bool], status: str) -> tuple:
     """
-    Normalize a single patent's risk score to 0-100 scale.
-    
-    Returns: (normalizedRisk: int, riskBand: str)
+    DEPRECATED: Use normalize_patent_risk from normalizer.py instead.
+    Kept for backwards compatibility during transition.
     """
-    # Expired or non-blocking patents have 0 risk
-    if status == "Expired" or blocks_use is False:
-        return (0, "LOW")
-    
-    # Uncertain patents get moderate default
-    if blocks_use is None or status == "Uncertain":
-        return (35, "MODERATE")
-    
-    # For blocking patents, normalize raw score (capped at PER_PATENT_CAP)
-    if raw_score <= 0:
-        return (50, "HIGH")  # Blocking but no score = default HIGH
-    
-    # Scale: 0-12 raw → 0-100 normalized
-    normalized = round(min((raw_score / PER_PATENT_CAP) * 100, 100))
-    
-    # Determine band
-    if normalized <= 20:
-        band = "LOW"
-    elif normalized <= 40:
-        band = "MODERATE"
-    elif normalized <= 70:
-        band = "HIGH"
-    else:
-        band = "CRITICAL"
-    
-    return (normalized, band)
-
-
+    result = normalize_patent_risk(raw_score, blocks_use, status)
+    return (result["normalizedRisk"], result["riskBand"])
 def _build_source_url(patent_num: str) -> str:
     """Build Google Patents URL for patent traceability."""
     if not patent_num or patent_num == "Unknown":
@@ -222,13 +262,28 @@ def _is_expired(expiry: Optional[str]) -> bool:
 
 
 def _format_date(date_str: Optional[str]) -> str:
-    """Format date string for display."""
+    """Format date string for display (legacy)."""
     if not date_str:
         return "Unknown"
     try:
         return date_str[:10]  # Return YYYY-MM-DD portion
     except:
         return "Unknown"
+
+
+def _format_date_strict(date_str: Optional[str]) -> Optional[str]:
+    """
+    Format date string strictly to YYYY-MM-DD or return None.
+    Per spec: ftoDate and expiry must be YYYY-MM-DD or null.
+    """
+    if not date_str:
+        return None
+    try:
+        # Validate it's a proper date
+        dt = datetime.strptime(date_str[:10], "%Y-%m-%d")
+        return dt.strftime("%Y-%m-%d")
+    except:
+        return None
 
 
 def _build_reason(
@@ -238,7 +293,10 @@ def _build_reason(
     expiry: Optional[str],
     error: Optional[str] = None,
 ) -> str:
-    """Build human-readable reason for patent status with actionable context."""
+    """
+    Build human-readable reason for patent status with actionable context.
+    NOTE: This is the LONG version for legal rationale. Use _build_short_reason for display.
+    """
     if error:
         return f"Analysis error: {error}. Manual review required to assess blocking status."
     
@@ -309,73 +367,103 @@ def build_visualization_payload(
     """
     Build structured visualization payload for frontend rendering.
     
+    ═══════════════════════════════════════════════════════════════════════════
+    OUTPUT SCHEMA (Jan 2026 - fixes pie legend NaN):
+    ═══════════════════════════════════════════════════════════════════════════
+    
     Returns:
         {
             "ftoGauge": { "value": 82, "band": "CRITICAL", "color": "#ef4444" },
-            "expiryTimeline": [ { "patent": "US...", "expiryDate": "2039-01-31", "status": "Blocking" } ],
-            "counts": { "blocking": 3, "nonBlocking": 2, "expired": 1, "uncertain": 1 },
-            "claimTypeDistribution": { "COMPOSITION": 2, "METHOD_OF_TREATMENT": 1 },
-            "riskPerPatent": [ { "patent": "US...", "score": 12 } ]
+            "pieData": [
+                {"label": "Blocking", "count": 3},
+                {"label": "Other", "count": 41}
+            ],
+            "blockingPatentsSummary": {
+                "count": 3,
+                "claimTypeCounts": {"Composition": 2, "Method of Treatment": 1}
+            },
+            "expiryTimeline": [ { "patent": "US...", "expiryDate": "2039-01-31" } ]
         }
+    
+    NOTE: pieData labels MUST be strings, counts MUST be integers (no NaN).
+    ═══════════════════════════════════════════════════════════════════════════
     """
-    fto_index = normalized_result.get("ftoIndex", 0)
-    band = normalized_result.get("band", "LOW")
+    # Use new field names from normalizer
+    normalized_risk = normalized_result.get("normalizedRiskInternal", normalized_result.get("ftoIndex", 0))
+    band = normalized_result.get("band", "CLEAR")
     
     # FTO Gauge data
     fto_gauge = {
-        "value": fto_index,
+        "value": int(normalized_risk) if normalized_risk is not None else 0,
         "band": band,
         "color": get_band_color(band),
         "description": get_band_description(band),
     }
     
+    # =========================================================================
+    # PIE DATA - Fix NaN bug by ensuring counts are always integers
+    # =========================================================================
+    blocking_count = len(blocking_patents) if blocking_patents else 0
+    total_patents = len(verifications) if verifications else 0
+    other_count = max(0, total_patents - blocking_count)  # Ensure non-negative
+    
+    # Ensure no NaN values - coerce to int
+    blocking_count = int(blocking_count) if blocking_count == blocking_count else 0  # NaN check
+    other_count = int(other_count) if other_count == other_count else 0
+    
+    pie_data = [
+        {"label": "Blocking", "count": blocking_count},
+        {"label": "Other", "count": other_count},
+    ]
+    
+    # =========================================================================
+    # BLOCKING PATENTS SUMMARY with claimTypeCounts
+    # =========================================================================
+    claim_type_counts = {}
+    for p in (blocking_patents or []):
+        ct = p.get("claimType", "OTHER")
+        # Humanize claim type for display
+        ct_display = CLAIM_TYPE_LABELS.get(ct, ct)
+        claim_type_counts[ct_display] = claim_type_counts.get(ct_display, 0) + 1
+    
+    blocking_patents_summary = {
+        "count": blocking_count,
+        "claimTypeCounts": claim_type_counts,
+    }
+    
     # Expiry timeline (all patents with expiry dates)
     expiry_timeline = []
-    for v in verifications:
+    for v in (verifications or []):
         expiry = v.get("expectedExpiry")
         if expiry:
-            status = "Blocking" if v.get("blocksUse") else "Non-blocking"
+            blocks_use = v.get("blocksUse")
+            status = "Blocking" if blocks_use is True else "Non-blocking"
             if _is_expired(expiry):
                 status = "Expired"
             expiry_timeline.append({
-                "patent": v.get("patent", "Unknown"),
-                "expiryDate": expiry[:10] if expiry else None,
+                "patentNumber": v.get("patent", "Unknown"),
+                "expiryDate": _format_date_strict(expiry),
                 "status": status,
-                "claimType": v.get("claimType", "OTHER"),
+                "claimType": CLAIM_TYPE_LABELS.get(v.get("claimType", "OTHER"), "Other"),
             })
     
     # Sort by expiry date
     expiry_timeline.sort(key=lambda x: x.get("expiryDate") or "9999-12-31")
     
-    # Counts for pie chart
+    # Legacy counts (kept for backward compatibility)
     counts = {
-        "blocking": len(blocking_patents),
-        "nonBlocking": len(non_blocking_patents),
-        "expired": len(expired_patents),
-        "uncertain": len(uncertain_patents),
+        "blocking": blocking_count,
+        "nonBlocking": len(non_blocking_patents) if non_blocking_patents else 0,
+        "expired": len(expired_patents) if expired_patents else 0,
+        "uncertain": len(uncertain_patents) if uncertain_patents else 0,
     }
-    
-    # Claim type distribution
-    claim_type_dist = {}
-    for v in verifications:
-        ct = v.get("claimType", "OTHER")
-        claim_type_dist[ct] = claim_type_dist.get(ct, 0) + 1
-    
-    # Risk per patent (for blocking patents)
-    risk_per_patent = []
-    for p in blocking_patents:
-        risk_per_patent.append({
-            "patent": p.get("patent", "Unknown"),
-            "score": p.get("riskScore", p.get("score", 0)),
-            "claimType": p.get("claimType", "OTHER"),
-        })
     
     return {
         "ftoGauge": fto_gauge,
+        "pieData": pie_data,
+        "blockingPatentsSummary": blocking_patents_summary,
         "expiryTimeline": expiry_timeline,
-        "counts": counts,
-        "claimTypeDistribution": claim_type_dist,
-        "riskPerPatent": risk_per_patent,
+        "counts": counts,  # Legacy field
     }
 
 
@@ -403,18 +491,19 @@ def build_summary_texts(
             "legal": "Detailed legal rationale (expandable)"
         }
     """
-    fto_index = normalized_result.get("ftoIndex", 0)
-    band = normalized_result.get("band", "LOW")
-    num_blocking = len(blocking_patents)
+    # Use new field names
+    normalized_risk = normalized_result.get("normalizedRiskInternal", normalized_result.get("ftoIndex", 0))
+    band = normalized_result.get("band", "CLEAR")
+    num_blocking = len(blocking_patents) if blocking_patents else 0
     
     # Build executive summary (1-2 sentences)
     executive = _build_executive_summary(
-        drug, disease, fto_index, band, num_blocking, earliest_freedom_date
+        drug, disease, normalized_risk, band, num_blocking, earliest_freedom_date
     )
     
     # Build business summary (3-6 lines)
     business = _build_business_summary(
-        drug, disease, fto_index, band, blocking_patents, 
+        drug, disease, normalized_risk, band, blocking_patents, 
         earliest_freedom_date, recommended_actions
     )
     
@@ -433,31 +522,34 @@ def build_summary_texts(
 def _build_executive_summary(
     drug: str,
     disease: str,
-    fto_index: int,
+    normalized_risk: int,
     band: str,
     num_blocking: int,
     earliest_freedom_date: Optional[str],
 ) -> str:
     """Build 1-2 sentence executive summary."""
-    if band == "LOW":
-        return f"FTO assessment for {drug} in {disease}: LOW RISK. No significant patent barriers identified. Recommend standard IP monitoring."
+    if band == "CLEAR":
+        return f"FTO assessment for {drug} in {disease}: CLEAR. No blocking patents identified. Recommend standard IP monitoring."
+    
+    elif band == "LOW":
+        return f"FTO assessment for {drug} in {disease}: LOW RISK. Minor patent concerns identified. Proceed with caution and monitor landscape."
     
     elif band == "MODERATE":
-        return f"FTO assessment for {drug} in {disease}: MODERATE RISK (Index: {fto_index}/100). {num_blocking} blocking patent(s) require attention. Recommend patent counsel review before proceeding."
+        return f"FTO assessment for {drug} in {disease}: MODERATE RISK (Index: {normalized_risk}/100). {num_blocking} blocking patent(s) require attention. Recommend patent counsel review before proceeding."
     
     elif band == "HIGH":
-        freedom_note = f" Earliest freedom date: {earliest_freedom_date}." if earliest_freedom_date else ""
-        return f"FTO assessment for {drug} in {disease}: HIGH RISK (Index: {fto_index}/100). {num_blocking} blocking patent(s) create significant barriers.{freedom_note} Licensing negotiations recommended."
+        freedom_note = f" Earliest FTO date: {earliest_freedom_date}." if earliest_freedom_date else ""
+        return f"FTO assessment for {drug} in {disease}: HIGH RISK (Index: {normalized_risk}/100). {num_blocking} blocking patent(s) create significant barriers.{freedom_note} Licensing negotiations recommended."
     
     else:  # CRITICAL
-        freedom_note = f" Earliest freedom date: {earliest_freedom_date}." if earliest_freedom_date else ""
-        return f"CRITICAL FTO RISK for {drug} in {disease} (Index: {fto_index}/100). {num_blocking} blocking patent(s) prevent commercialization.{freedom_note} Licensing required before proceeding."
+        freedom_note = f" Earliest FTO date: {earliest_freedom_date}." if earliest_freedom_date else ""
+        return f"CRITICAL FTO RISK for {drug} in {disease} (Index: {normalized_risk}/100). {num_blocking} blocking patent(s) prevent commercialization.{freedom_note} Licensing required before proceeding."
 
 
 def _build_business_summary(
     drug: str,
     disease: str,
-    fto_index: int,
+    normalized_risk: int,
     band: str,
     blocking_patents: List[Dict[str, Any]],
     earliest_freedom_date: Optional[str],
@@ -467,7 +559,7 @@ def _build_business_summary(
     lines = []
     
     # Opening assessment
-    lines.append(f"Freedom-to-Operate assessment for {drug} in {disease} indicates {band} risk (Index: {fto_index}/100).")
+    lines.append(f"Freedom-to-Operate assessment for {drug} in {disease} indicates {band} risk (Index: {normalized_risk}/100).")
     
     if not blocking_patents:
         lines.append("No blocking patents identified in USPTO search.")
@@ -484,9 +576,9 @@ def _build_business_summary(
     if method_blockers:
         lines.append(f"{len(method_blockers)} method-of-treatment patent(s) cover the therapeutic indication.")
     
-    # Timeline impact
+    # Timeline impact - use ftoDate terminology
     if earliest_freedom_date:
-        lines.append(f"All blocking patents expire by {earliest_freedom_date}.")
+        lines.append(f"Earliest FTO date: {earliest_freedom_date}.")
     
     # Options summary
     if recommended_actions:

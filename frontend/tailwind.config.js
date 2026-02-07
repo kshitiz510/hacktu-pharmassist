@@ -10,16 +10,15 @@ export default {
          ═══════════════════════════════════════════════════════════════════════════ */
       fontFamily: {
         sans: [
-          "Inter",
-          "SF Pro Display",
+          "DM Sans",
+          "Plus Jakarta Sans",
           "-apple-system",
           "BlinkMacSystemFont",
           "Segoe UI",
-          "Roboto",
           "sans-serif",
         ],
         mono: ["JetBrains Mono", "SF Mono", "Fira Code", "Monaco", "Consolas", "monospace"],
-        display: ["Inter", "SF Pro Display", "-apple-system", "sans-serif"],
+        display: ["Plus Jakarta Sans", "DM Sans", "-apple-system", "sans-serif"],
       },
       fontSize: {
         /* Micro - Labels, badges, captions */

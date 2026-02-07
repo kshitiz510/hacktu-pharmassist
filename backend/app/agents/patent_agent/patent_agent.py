@@ -72,7 +72,7 @@ def _llm_extract_prompt(
 ) -> Tuple[Optional[str], Optional[str], Optional[str]]:
     """
     Use the configured LLM to extract drug, disease, jurisdiction from the prompt.
-    
+
     Follows the same pattern as clinical_agent._llm_extract_prompt()
     """
     prompt = f"""You are a pharmaceutical patent data extraction expert. Your job is to extract structured information from user queries about patent analysis and freedom-to-operate.
@@ -127,7 +127,9 @@ Return ONLY a JSON object, nothing else:"""
 
     # Helper to normalize null/empty strings
     def clean_val(val, default=None):
-        if val is None or (isinstance(val, str) and val.lower() in ("null", "none", "")):
+        if val is None or (
+            isinstance(val, str) and val.lower() in ("null", "none", "")
+        ):
             return default
         return val
 
@@ -135,7 +137,9 @@ Return ONLY a JSON object, nothing else:"""
     disease = clean_val(data.get("disease"))
     jurisdiction = clean_val(data.get("jurisdiction"), default="US")
 
-    print(f"[PATENT] LLM extracted: drug={drug}, disease={disease}, jurisdiction={jurisdiction}")
+    print(
+        f"[PATENT] LLM extracted: drug={drug}, disease={disease}, jurisdiction={jurisdiction}"
+    )
 
     return drug, disease, jurisdiction
 
@@ -155,17 +159,17 @@ def run_patent_agent(
 ) -> Dict[str, Any]:
     """
     Run the patent FTO agent.
-    
+
     If drug/disease are provided by orchestrator, use them directly.
     Otherwise, fall back to LLM extraction for backward compatibility.
-    
+
     Args:
         user_prompt: Natural language query from user
         drug: Override extracted drug name
         disease: Override extracted disease/indication
         jurisdiction: Override extracted jurisdiction (default: US)
         max_patents: Maximum patents to analyze (default: 5)
-    
+
     Returns:
         Structured response matching clinical_agent output format
     """
@@ -175,8 +179,10 @@ def run_patent_agent(
     # -------------------------------------------------------------------------
     # STEP 1: PARSE INPUT (use orchestrator params or fallback to LLM extraction)
     # -------------------------------------------------------------------------
-    if drug and disease:
-        print(f"[PATENT] Using orchestrator-provided params: drug={drug}, disease={disease}, jurisdiction={jurisdiction}")
+    if drug is not None or disease is not None or jurisdiction is not None:
+        print(
+            f"[PATENT] Using orchestrator-provided params: drug={drug}, disease={disease}, jurisdiction={jurisdiction}"
+        )
         llm_drug = drug
         llm_disease = disease
         llm_jurisdiction = jurisdiction or "US"
@@ -185,7 +191,9 @@ def run_patent_agent(
         print("[PATENT] No params from orchestrator, falling back to LLM extraction...")
         llm_drug, llm_disease, llm_jurisdiction = _llm_extract_prompt(user_prompt)
 
-    print(f"[PATENT] Final params: drug={llm_drug}, disease={llm_disease}, jurisdiction={llm_jurisdiction}")
+    print(
+        f"[PATENT] Final params: drug={llm_drug}, disease={llm_disease}, jurisdiction={llm_jurisdiction}"
+    )
 
     # Prefer explicit parameters, then LLM extraction
     final_drug = drug or llm_drug
@@ -220,7 +228,9 @@ def run_patent_agent(
         fto_fn = getattr(fto_decision_engine, "_run", fto_decision_engine)
 
         # ----- Tool 1: Discover Patents -----
-        print(f"[PATENT] Step 1: Discovering patents for {final_drug} + {final_disease}")
+        print(
+            f"[PATENT] Step 1: Discovering patents for {final_drug} + {final_disease}"
+        )
         discovery_result = discover_fn(
             drug=final_drug,
             disease=final_disease,
@@ -241,16 +251,32 @@ def run_patent_agent(
                 },
                 fto_result={
                     "ftoStatus": "CLEAR",
-                    "totalScore": 0,
+                    "ftoDate": None,
+                    "normalizedRiskInternal": 0,
+                    "patentsFound": 0,
                     "confidence": "LOW",
+                    "blockingPatentsSummary": {
+                        "count": 0,
+                        "claimTypeCounts": {},
+                    },
                     "blockingPatents": [],
-                    "nonBlockingPatents": [],
-                    "expiredPatents": [],
-                    "uncertainPatents": [],
-                    "earliestFreedomDate": None,
-                    "recommendedActions": ["No patents found in USPTO search. Consider expanding search terms."],
-                    "scoringNotes": [],
-                    "summary": f"No patents found for {final_drug} in {final_disease}. FTO appears clear but recommend manual verification.",
+                    "expandedResults": {
+                        "nonBlockingPatents": [],
+                        "expiredPatents": [],
+                        "uncertainPatents": [],
+                    },
+                    "recommendedActions": [{
+                        "action": "Proceed with Standard Monitoring",
+                        "reason": "No patents found; verify search parameters",
+                        "feasibility": "HIGH",
+                        "nextStep": "Consider expanding search terms"
+                    }],
+                    "summary": {
+                        "executive": f"No patents found for {final_drug} in {final_disease}. FTO appears clear but recommend manual verification.",
+                        "business": f"No blocking patents identified. Proceed with standard IP monitoring.",
+                        "legal": "No patents analyzed. Recommend manual verification of patent landscape.",
+                    },
+                    "visualizationPayload": {},
                     "disclaimer": "This is an automated assessment. Consult qualified patent counsel for legal advice.",
                 },
                 discovery_result=discovery_result,
@@ -264,7 +290,7 @@ def run_patent_agent(
 
         for i, patent_data in enumerate(patents):
             patent_number = patent_data.get("patentNumber")
-            print(f"[PATENT]   [{i+1}/{len(patents)}] Verifying {patent_number}")
+            print(f"[PATENT]   [{i + 1}/{len(patents)}] Verifying {patent_number}")
 
             try:
                 verification = verify_fn(
@@ -276,11 +302,13 @@ def run_patent_agent(
                 verifications.append(verification)
             except Exception as e:
                 print(f"[PATENT]   Error verifying {patent_number}: {e}")
-                verifications.append({
-                    "patent": patent_number,
-                    "error": str(e),
-                    "blocksUse": None,
-                })
+                verifications.append(
+                    {
+                        "patent": patent_number,
+                        "error": str(e),
+                        "blocksUse": None,
+                    }
+                )
 
         # ----- Tool 3: FTO Decision Engine -----
         print("[PATENT] Step 3: Running FTO decision engine")
@@ -289,6 +317,7 @@ def run_patent_agent(
             drug=final_drug,
             disease=final_disease,
             jurisdiction=final_jurisdiction,
+            total_found_in_api=discovery_result.get("totalFound", len(patents)),
         )
 
         # ----- Build Response -----
@@ -308,6 +337,7 @@ def run_patent_agent(
     except Exception as e:
         print(f"[PATENT] Pipeline error: {e}")
         import traceback
+
         traceback.print_exc()
 
         return {
@@ -341,58 +371,80 @@ def _build_response(
     analysis_start: datetime,
 ) -> Dict[str, Any]:
     """
-    Build the final response in the same shape as clinical_agent output.
-    
-    REFINEMENTS (v2):
-    - Removed internal scoring artifacts (rawScore, scoringNotes, totalScore)
-    - Added Top 3 Blocking Patents summary
-    - Simplified confidence logic (HIGH/MEDIUM/LOW only)
-    - All risks normalized to 0-100 integers
-    - Added sourceUrl for traceability
-    
+    Build the final response in the canonical schema.
+
+    CANONICAL SCHEMA (v3):
+    - ftoStatus: "CLEAR" | "NEEDS_MONITORING" | "AT_RISK" | "BLOCKED"
+    - ftoDate: YYYY-MM-DD (earliest freedom date) - renamed from earliestFreedomDate
+    - normalizedRiskInternal: 0-100 (internal sorting only, NOT displayed)
+    - patentsFound: total count
+    - blockingPatentsSummary: { count, claimTypeCounts }
+    - blockingPatents: compact format (no evidence, no internal scores)
+    - recommendedActions: top 3 only, each with nextStep (singular)
+    - expandedResults: { nonBlockingPatents, expiredPatents, uncertainPatents }
+    - pieData: { labels: string[], counts: number[] } - integers only, no NaN
+
     Top-level keys:
     - agentType, query, parsedInput, summary, confidence
-    - data (structured payload with refined fields)
+    - data (structured payload with canonical fields)
     - visualizations (from viz_builder)
     - metadata (timestamps, counts, warnings)
     """
     analysis_end = datetime.now()
     duration_ms = int((analysis_end - analysis_start).total_seconds() * 1000)
 
-    # Extract key metrics (refined schema - no rawScore/totalScore)
-    fto_risk_index = fto_result.get("ftoRiskIndex", 0)
-    fto_risk_band = fto_result.get("ftoRiskBand", "LOW")
-    fto_status = fto_result.get("ftoStatus", "UNKNOWN")
+    # Extract key metrics (canonical schema)
+    fto_status = fto_result.get("ftoStatus", "CLEAR")
+    fto_date = fto_result.get("ftoDate")  # Renamed from earliestFreedomDate
+    normalized_risk_internal = fto_result.get("normalizedRiskInternal", 0)
+    patents_found = fto_result.get("patentsFound", 0)
     confidence = fto_result.get("confidence", "LOW")
+    
+    # Patent lists
     blocking_patents = fto_result.get("blockingPatents", [])
-    non_blocking_patents = fto_result.get("nonBlockingPatents", [])
-    expired_patents = fto_result.get("expiredPatents", [])
-    uncertain_patents = fto_result.get("uncertainPatents", [])
-    earliest_freedom_date = fto_result.get("earliestFreedomDate")
+    blocking_patents_summary = fto_result.get("blockingPatentsSummary", {
+        "count": len(blocking_patents),
+        "claimTypeCounts": {},
+    })
+    
+    # Expanded results (non-blocking patents go here)
+    expanded_results = fto_result.get("expandedResults", {
+        "nonBlockingPatents": [],
+        "expiredPatents": [],
+        "uncertainPatents": [],
+    })
+    
+    # Recommendations (top 3 with nextStep singular)
     recommended_actions = fto_result.get("recommendedActions", [])
+    
+    # Summaries
     summary_obj = fto_result.get("summary", {})
     viz_payload = fto_result.get("visualizationPayload", {})
 
     # Build human-readable summary (use executive summary if available)
     if isinstance(summary_obj, dict):
-        summary = summary_obj.get("executive", _build_summary(
-            drug=parsed_input["drug"],
-            disease=parsed_input["disease"],
-            fto_status=fto_status,
-            num_blocking=len(blocking_patents),
-            earliest_freedom_date=earliest_freedom_date,
-        ))
-    else:
-        summary = str(summary_obj) if summary_obj else _build_summary(
-            drug=parsed_input["drug"],
-            disease=parsed_input["disease"],
-            fto_status=fto_status,
-            num_blocking=len(blocking_patents),
-            earliest_freedom_date=earliest_freedom_date,
+        summary = summary_obj.get(
+            "executive",
+            _build_summary(
+                drug=parsed_input["drug"],
+                disease=parsed_input["disease"],
+                fto_status=fto_status,
+                num_blocking=blocking_patents_summary.get("count", len(blocking_patents)),
+                fto_date=fto_date,
+            ),
         )
-
-    # Build Top 3 Blocking Patents summary
-    top_3_blocking = _build_top_3_blocking_summary(blocking_patents)
+    else:
+        summary = (
+            str(summary_obj)
+            if summary_obj
+            else _build_summary(
+                drug=parsed_input["drug"],
+                disease=parsed_input["disease"],
+                fto_status=fto_status,
+                num_blocking=blocking_patents_summary.get("count", len(blocking_patents)),
+                fto_date=fto_date,
+            )
+        )
 
     # Build payload for visualizations
     payload = {
@@ -404,12 +456,50 @@ def _build_response(
 
     # Count warnings
     warnings = []
+    uncertain_patents = expanded_results.get("uncertainPatents", [])
     if uncertain_patents:
-        warnings.append(f"{len(uncertain_patents)} patent(s) could not be fully verified")
+        warnings.append(
+            f"{len(uncertain_patents)} patent(s) could not be fully verified"
+        )
     if any(p.get("hasContinuations") for p in blocking_patents):
-        warnings.append("Some blocking patents have continuations that may extend protection")
-    if fto_risk_band == "CRITICAL":
-        warnings.append("CRITICAL risk level - immediate legal consultation recommended")
+        warnings.append(
+            "Some blocking patents have continuations that may extend protection"
+        )
+    if fto_status == "BLOCKED":
+        warnings.append(
+            "BLOCKED status - immediate legal consultation recommended"
+        )
+
+    # Build canonical summary object for banner
+    num_blocking = blocking_patents_summary.get("count", len(blocking_patents))
+    
+    if fto_status == "CLEAR":
+        banner_answer = "Yes"
+    elif fto_status in ("NEEDS_MONITORING", "AT_RISK"):
+        banner_answer = "Risky"
+    else:  # BLOCKED
+        banner_answer = "No"
+    
+    banner_summary = {
+        "researcherQuestion": "Can we proceed without patent infringement?",
+        "answer": banner_answer,
+        "explainers": []
+    }
+    
+    banner_summary["explainers"].append(f"Status: {fto_status}")
+    if num_blocking > 0:
+        banner_summary["explainers"].append(f"{num_blocking} blocking patent(s)")
+    if fto_date:
+        banner_summary["explainers"].append(f"FTO date: {fto_date}")
+    
+    # Generate suggested next prompts
+    drug = parsed_input.get("drug", "drug")
+    disease = parsed_input.get("disease", "disease")
+    suggested_next_prompts = [
+        {"prompt": f"Show clinical trials for {drug} in {disease}"},
+        {"prompt": f"Analyze market size for {drug}"},
+        {"prompt": f"Find web intelligence for {drug} competitors"}
+    ]
 
     return {
         "agentType": "PATENT_FTO",
@@ -417,41 +507,48 @@ def _build_response(
         "query": user_prompt,
         "parsedInput": parsed_input,
         "summary": summary,
+        "bannerSummary": banner_summary,  # Canonical summary for UI banner
         "confidence": confidence,
+        "suggestedNextPrompts": suggested_next_prompts,
         "data": {
-            # Core decision fields (no internal scores)
-            "ftoRiskIndex": fto_risk_index,
-            "ftoRiskBand": fto_risk_band,
+            # Core decision fields (canonical schema)
             "ftoStatus": fto_status,
+            "ftoDate": fto_date,  # Renamed from earliestFreedomDate
+            "normalizedRiskInternal": normalized_risk_internal,  # Internal use only
+            "patentsFound": patents_found,
             
-            # Patent lists (formatted for display with normalizedRisk, riskBand, sourceUrl)
+            # Blocking patents summary with claimTypeCounts
+            "blockingPatentsSummary": blocking_patents_summary,
+            
+            # Blocking patents (compact format, no evidence/internal scores)
             "blockingPatents": blocking_patents,
-            "nonBlockingPatents": non_blocking_patents,
-            "expiredPatents": expired_patents,
-            "uncertainPatents": uncertain_patents,
             
-            # Top 3 Blocking Patents summary (NEW)
-            "top3BlockingPatents": top_3_blocking,
-            
-            # Decision data
-            "earliestFreedomDate": earliest_freedom_date,
+            # Recommendations (top 3, each with nextStep singular)
             "recommendedActions": recommended_actions,
             
             # Multi-layer summaries
-            "summaryLayers": summary_obj if isinstance(summary_obj, dict) else {
+            "summaryLayers": summary_obj
+            if isinstance(summary_obj, dict)
+            else {
                 "executive": summary,
                 "business": summary,
-                "legal": "Consult qualified patent counsel for detailed legal analysis."
+                "legal": "Consult qualified patent counsel for detailed legal analysis.",
             },
             
-            # Visualization payload (for frontend charts)
+            # Visualization payload (includes pieData with integer counts)
             "visualizationPayload": viz_payload,
+            
+            # Expanded results (non-blocking patents, expired, uncertain)
+            "expandedResults": expanded_results,
             
             # Continuation warnings (kept for legal review)
             "continuationWarnings": fto_result.get("continuationWarnings", []),
             
             # Metadata
-            "disclaimer": fto_result.get("disclaimer", "This is an automated assessment. Consult qualified patent counsel for legal advice."),
+            "disclaimer": fto_result.get(
+                "disclaimer",
+                "This is an automated assessment. Consult qualified patent counsel for legal advice.",
+            ),
         },
         "visualizations": build_patent_visualizations(payload),
         "metadata": {
@@ -461,60 +558,14 @@ def _build_response(
             "jurisdiction": parsed_input["jurisdiction"],
             "patentsDiscovered": len(discovery_result.get("patents", [])),
             "patentsVerified": len(verifications),
-            "patentsBlocking": len(blocking_patents),
-            "patentsNonBlocking": len(non_blocking_patents),
-            "patentsExpired": len(expired_patents),
-            "patentsUncertain": len(uncertain_patents),
-            "ftoRiskIndex": fto_risk_index,
-            "ftoRiskBand": fto_risk_band,
+            "patentsBlocking": blocking_patents_summary.get("count", len(blocking_patents)),
+            "patentsNonBlocking": len(expanded_results.get("nonBlockingPatents", [])),
+            "patentsExpired": len(expanded_results.get("expiredPatents", [])),
+            "patentsUncertain": len(expanded_results.get("uncertainPatents", [])),
+            "ftoStatus": fto_status,
             "warnings": warnings,
         },
     }
-
-
-def _build_top_3_blocking_summary(blocking_patents: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    """
-    Build Top 3 Blocking Patents summary for executive review.
-    
-    Sorted by normalizedRisk (descending) to highlight highest-risk patents.
-    
-    Returns list of simplified patent objects:
-        [
-            {
-                "patent": "US12345678B2",
-                "claimType": "Composition",
-                "normalizedRisk": 85,
-                "riskBand": "CRITICAL",
-                "reason": "Composition claim covers API; blocks core use.",
-                "sourceUrl": "https://patents.google.com/patent/US12345678B2"
-            }
-        ]
-    """
-    if not blocking_patents:
-        return []
-    
-    # Sort by normalizedRisk descending
-    sorted_patents = sorted(
-        blocking_patents,
-        key=lambda p: p.get("normalizedRisk", 0),
-        reverse=True
-    )
-    
-    # Take top 3
-    top_3 = sorted_patents[:3]
-    
-    # Return simplified summary
-    return [
-        {
-            "patent": p.get("patent", "Unknown"),
-            "claimType": p.get("claimType", "Unknown"),
-            "normalizedRisk": p.get("normalizedRisk", 0),
-            "riskBand": p.get("riskBand", "HIGH"),
-            "reason": p.get("reason", "Blocks intended use"),
-            "sourceUrl": p.get("sourceUrl", ""),
-        }
-        for p in top_3
-    ]
 
 
 def _build_summary(
@@ -522,22 +573,24 @@ def _build_summary(
     disease: str,
     fto_status: str,
     num_blocking: int,
-    earliest_freedom_date: Optional[str],
+    fto_date: Optional[str],
 ) -> str:
     """Build a human-readable summary of the FTO analysis."""
-    
+
     status_descriptions = {
         "CLEAR": f"No blocking patents identified for {drug} in {disease}. Freedom to operate appears clear.",
-        "LOW_RISK": f"Minor patent risks identified for {drug} in {disease}. Proceed with caution and monitor patent landscape.",
-        "MODERATE_RISK": f"Moderate patent risks for {drug} in {disease}. {num_blocking} blocking patent(s) identified. Recommend consulting patent counsel.",
-        "HIGH_RISK": f"High patent risk for {drug} in {disease}. {num_blocking} blocking patent(s) create significant barriers. Licensing likely required.",
+        "NEEDS_MONITORING": f"Minor patent risks identified for {drug} in {disease}. Proceed with caution and monitor patent landscape.",
+        "AT_RISK": f"Moderate patent risks for {drug} in {disease}. {num_blocking} blocking patent(s) identified. Recommend consulting patent counsel.",
+        "BLOCKED": f"High patent risk for {drug} in {disease}. {num_blocking} blocking patent(s) create significant barriers. Licensing likely required.",
     }
-    
-    summary = status_descriptions.get(fto_status, f"Patent analysis completed for {drug} in {disease}.")
-    
-    if earliest_freedom_date and fto_status in ("MODERATE_RISK", "HIGH_RISK"):
-        summary += f" Earliest potential freedom date: {earliest_freedom_date}."
-    
+
+    summary = status_descriptions.get(
+        fto_status, f"Patent analysis completed for {drug} in {disease}."
+    )
+
+    if fto_date and fto_status in ("AT_RISK", "BLOCKED"):
+        summary += f" Earliest FTO date: {fto_date}."
+
     return summary
 
 

@@ -59,3 +59,15 @@ export {
   LoadingOverlay,
   ProgressBar,
 } from "./loading";
+
+// Tab components
+export { Tabs, TabsList, TabsTrigger, TabsContent } from "./tabs";
+
+// Metric components
+export {
+  MetricCard,
+  MetricGrid,
+  DataTable as MetricDataTable,
+  InfoCard,
+  SectionHeader,
+} from "./metric-card";
