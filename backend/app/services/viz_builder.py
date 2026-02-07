@@ -235,7 +235,7 @@ def build_clinical_visualizations(payload: dict) -> List[dict]:
         viz.append(
             build_table(
                 id="trials_table",
-                title="Clinical Trials (up to 50)",
+                title="Clinical Trials",
                 columns=columns,
                 rows=trials_list,
                 page_size=20,

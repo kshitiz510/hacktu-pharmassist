@@ -41,19 +41,21 @@ import {
 } from "lucide-react";
 
 // ============================================================================
-// COLOR PALETTE - Beautiful, accessible colors
+// COLOR PALETTE - Vibrant, interesting colors
 // ============================================================================
 export const CHART_COLORS = [
-  "#8b5cf6", // Violet
-  "#06b6d4", // Cyan
-  "#10b981", // Emerald
+  "#7c3aed", // Vibrant purple
+  "#06b6d4", // Bright cyan
+  "#14b8a6", // Teal
   "#f59e0b", // Amber
-  "#ef4444", // Red
-  "#ec4899", // Pink
+  "#ec4899", // Hot pink
+  "#8b5cf6", // Violet
   "#3b82f6", // Blue
-  "#84cc16", // Lime
+  "#10b981", // Emerald
   "#f97316", // Orange
   "#6366f1", // Indigo
+  "#84cc16", // Lime
+  "#ef4444", // Red
 ];
 
 export const GRADIENT_COLORS = [
@@ -157,27 +159,35 @@ export const sanitizeData = (data, fields = []) => {
 };
 
 // ============================================================================
-// BASE CARD COMPONENT
+// BASE CARD COMPONENT - Enhanced with vibrant styling
 // ============================================================================
 
 const VizCard = ({ title, description, icon: Icon, children, className = "" }) => (
   <motion.div
     initial={{ opacity: 0, y: 20 }}
     animate={{ opacity: 1, y: 0 }}
-    transition={{ duration: 0.4, ease: "easeOut" }}
-    className={`bg-card border border-border rounded-xl p-5 shadow-sm hover:shadow-md transition-shadow ${className}`}
+    transition={{ duration: 0.5, ease: [0.4, 0, 0.2, 1] }}
+    className={`bg-gradient-to-br from-card via-card/95 to-card/90 border-2 border-border/30 rounded-2xl p-6 shadow-2xl hover:shadow-3xl hover:border-primary/20 transition-all duration-300 backdrop-blur-sm ${className}`}
   >
-    <div className="flex items-start justify-between mb-4">
-      <div className="flex-1">
-        {title && (
-          <h3 className="text-base font-semibold text-foreground flex items-center gap-2">
-            {Icon && <Icon size={18} className="text-primary" />}
-            {title}
+    {title && (
+      <div className="flex items-start justify-between mb-5 pb-4 border-b-2 border-gradient-to-r from-primary/20 via-border/40 to-primary/20">
+        <div className="flex-1">
+          <h3 className="text-lg font-bold text-foreground flex items-center gap-3">
+            {Icon && (
+              <div className="p-2.5 rounded-xl bg-gradient-to-br from-primary/20 via-primary/15 to-primary/10 border-2 border-primary/30 shadow-md">
+                <Icon size={20} className="text-primary" />
+              </div>
+            )}
+            <span className="bg-gradient-to-r from-foreground to-foreground/90 bg-clip-text text-transparent">
+              {title}
+            </span>
           </h3>
-        )}
-        {description && <p className="text-sm text-muted-foreground mt-1">{description}</p>}
+          {description && (
+            <p className="text-sm text-muted-foreground mt-2 leading-relaxed">{description}</p>
+          )}
+        </div>
       </div>
-    </div>
+    )}
     {children}
   </motion.div>
 );
@@ -208,7 +218,7 @@ const CustomTooltip = ({ active, payload, label, labelFormatter }) => {
 };
 
 // ============================================================================
-// BAR CHART COMPONENT
+// BAR CHART COMPONENT - Supports both vertical and horizontal orientations
 // ============================================================================
 
 export const BarChartViz = ({ viz }) => {
@@ -227,71 +237,98 @@ export const BarChartViz = ({ viz }) => {
     );
   }
 
+  // In Recharts: layout="vertical" means bars go horizontally (left to right)
+  // layout="horizontal" (default) means bars go vertically (bottom to top)
   const isHorizontal = orientation === "horizontal";
 
   return (
     <VizCard title={title} description={description} icon={BarChart3}>
-      <div className="h-[300px] w-full">
+      <div className="h-[400px] w-full">
         <ResponsiveContainer width="100%" height="100%">
           <RechartsBarChart
             data={sanitizedData}
             layout={isHorizontal ? "vertical" : "horizontal"}
-            margin={{ top: 10, right: 30, left: isHorizontal ? 80 : 0, bottom: 20 }}
+            margin={{
+              top: 20,
+              right: 50,
+              left: isHorizontal ? 20 : 40,
+              bottom: isHorizontal ? 20 : 70,
+            }}
           >
             <defs>
-              {GRADIENT_COLORS.map((color, idx) => (
-                <linearGradient key={idx} id={`barGradient${idx}`} x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor={color.start} stopOpacity={1} />
-                  <stop offset="100%" stopColor={color.end} stopOpacity={0.8} />
-                </linearGradient>
-              ))}
+              {sanitizedData.map((_, idx) => {
+                const color = CHART_COLORS[idx % CHART_COLORS.length];
+                return (
+                  <linearGradient
+                    key={`barGrad${idx}`}
+                    id={`barGrad${idx}`}
+                    x1="0"
+                    y1="0"
+                    x2={isHorizontal ? "1" : "0"}
+                    y2={isHorizontal ? "0" : "1"}
+                  >
+                    <stop offset="0%" stopColor={color} stopOpacity={1} />
+                    <stop offset="100%" stopColor={color} stopOpacity={0.65} />
+                  </linearGradient>
+                );
+              })}
             </defs>
-            <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" opacity={0.5} />
+            <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" opacity={0.3} />
             {isHorizontal ? (
               <>
                 <XAxis
                   type="number"
-                  stroke="var(--muted-foreground)"
-                  fontSize={12}
-                  tickLine={false}
-                  axisLine={false}
+                  tick={{ fill: "hsl(var(--foreground))", fontSize: 12 }}
+                  tickLine={{ stroke: "hsl(var(--border))" }}
+                  axisLine={{ stroke: "hsl(var(--border))", strokeWidth: 1 }}
                   tickFormatter={formatValue}
                 />
                 <YAxis
                   dataKey={xField}
                   type="category"
-                  stroke="var(--muted-foreground)"
-                  fontSize={12}
-                  tickLine={false}
-                  axisLine={false}
-                  width={70}
-                  tickFormatter={(v) => (v?.length > 12 ? v.slice(0, 12) + "…" : v)}
+                  tick={{ fill: "hsl(var(--foreground))", fontSize: 12 }}
+                  tickLine={{ stroke: "hsl(var(--border))" }}
+                  axisLine={{ stroke: "hsl(var(--border))", strokeWidth: 1 }}
+                  width={180}
+                  tickFormatter={(v) => (v?.length > 25 ? v.slice(0, 25) + "…" : v)}
                 />
               </>
             ) : (
               <>
                 <XAxis
                   dataKey={xField}
-                  stroke="var(--muted-foreground)"
-                  fontSize={12}
-                  tickLine={false}
-                  axisLine={false}
+                  tick={{ fill: "hsl(var(--foreground))", fontSize: 11 }}
+                  tickLine={{ stroke: "hsl(var(--border))" }}
+                  axisLine={{ stroke: "hsl(var(--border))", strokeWidth: 1 }}
                   tickFormatter={(v) => (v?.length > 10 ? v.slice(0, 10) + "…" : v)}
-                  angle={-35}
+                  angle={-45}
                   textAnchor="end"
-                  height={60}
+                  height={70}
+                  interval={0}
                 />
                 <YAxis
-                  stroke="var(--muted-foreground)"
-                  fontSize={12}
-                  tickLine={false}
-                  axisLine={false}
+                  tick={{ fill: "hsl(var(--foreground))", fontSize: 12 }}
+                  tickLine={{ stroke: "hsl(var(--border))" }}
+                  axisLine={{ stroke: "hsl(var(--border))", strokeWidth: 1 }}
                   tickFormatter={formatValue}
                 />
               </>
             )}
-            <Tooltip content={<CustomTooltip />} />
-            <Bar dataKey={yField} fill="url(#barGradient0)" radius={[4, 4, 0, 0]} maxBarSize={50} />
+            <Tooltip
+              content={<CustomTooltip />}
+              cursor={{ fill: "hsl(var(--muted))", opacity: 0.15 }}
+            />
+            <Bar
+              dataKey={yField}
+              radius={isHorizontal ? [0, 6, 6, 0] : [6, 6, 0, 0]}
+              maxBarSize={55}
+              animationDuration={800}
+              animationEasing="ease-out"
+            >
+              {sanitizedData.map((entry, idx) => (
+                <Cell key={`cell-${idx}`} fill={`url(#barGrad${idx})`} />
+              ))}
+            </Bar>
           </RechartsBarChart>
         </ResponsiveContainer>
       </div>
@@ -343,44 +380,82 @@ export const PieChartViz = ({ viz }) => {
         fill="white"
         textAnchor="middle"
         dominantBaseline="central"
-        fontSize={12}
-        fontWeight={600}
+        fontSize={14}
+        fontWeight={700}
       >
         {`${(percent * 100).toFixed(0)}%`}
       </text>
     );
   };
 
+  // Custom legend formatter to show percentages for all slices
+  const renderLegendText = (value, entry) => {
+    const percent = ((entry.value / total) * 100).toFixed(1);
+    return (
+      <span className="text-sm text-foreground">
+        {value} <span className="text-muted-foreground">({percent}%)</span>
+      </span>
+    );
+  };
+
   return (
     <VizCard title={title} description={description} icon={PieChartIcon}>
-      <div className="h-[300px] w-full">
+      <div className="h-[450px] w-full flex items-center justify-center">
         <ResponsiveContainer width="100%" height="100%">
           <RechartsPieChart>
+            <defs>
+              {sanitizedData.map((_, idx) => (
+                <linearGradient key={idx} id={`pieGradient${idx}`} x1="0" y1="0" x2="1" y2="1">
+                  <stop
+                    offset="0%"
+                    stopColor={CHART_COLORS[idx % CHART_COLORS.length]}
+                    stopOpacity={1}
+                  />
+                  <stop
+                    offset="100%"
+                    stopColor={CHART_COLORS[idx % CHART_COLORS.length]}
+                    stopOpacity={0.7}
+                  />
+                </linearGradient>
+              ))}
+            </defs>
             <Pie
               data={sanitizedData}
               cx="50%"
-              cy="50%"
-              innerRadius={60}
-              outerRadius={100}
-              paddingAngle={2}
+              cy="45%"
+              innerRadius={80}
+              outerRadius={140}
+              paddingAngle={3}
               dataKey="value"
               labelLine={false}
               label={renderCustomLabel}
+              animationDuration={1000}
+              animationEasing="ease-out"
             >
               {sanitizedData.map((entry, idx) => (
                 <Cell
                   key={`cell-${idx}`}
-                  fill={CHART_COLORS[idx % CHART_COLORS.length]}
+                  fill={`url(#pieGradient${idx})`}
                   stroke="var(--background)"
-                  strokeWidth={2}
+                  strokeWidth={3}
                 />
               ))}
             </Pie>
             <Tooltip content={<CustomTooltip />} />
             <Legend
               verticalAlign="bottom"
-              height={36}
-              formatter={(value) => <span className="text-sm text-foreground">{value}</span>}
+              height={100}
+              iconType="circle"
+              iconSize={12}
+              wrapperStyle={{ paddingTop: "20px" }}
+              formatter={(value, entry) => {
+                const percent = ((entry.value / total) * 100).toFixed(1);
+                return (
+                  <span className="text-sm font-medium text-foreground">
+                    {value} <span className="text-muted-foreground">({percent}%)</span>
+                  </span>
+                );
+              }}
             />
           </RechartsPieChart>
         </ResponsiveContainer>
@@ -473,40 +548,53 @@ export const AreaChartViz = ({ viz }) => {
 
   return (
     <VizCard title={title} description={description}>
-      <div className="h-[300px] w-full">
+      <div className="h-[450px] w-full">
         <ResponsiveContainer width="100%" height="100%">
           <RechartsAreaChart
             data={sanitizedData}
-            margin={{ top: 10, right: 30, left: 0, bottom: 20 }}
+            margin={{ top: 25, right: 50, left: 60, bottom: 60 }}
           >
             <defs>
               <linearGradient id="areaGradient" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.3} />
+                <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.4} />
+                <stop offset="50%" stopColor="#8b5cf6" stopOpacity={0.2} />
                 <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0} />
               </linearGradient>
             </defs>
-            <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" opacity={0.5} />
+            <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" opacity={0.2} />
             <XAxis
               dataKey={xField}
               stroke="var(--muted-foreground)"
-              fontSize={12}
-              tickLine={false}
-              axisLine={false}
+              fontSize={13}
+              tickLine={{ stroke: "var(--border)" }}
+              axisLine={{ stroke: "var(--border)", strokeWidth: 1 }}
+              angle={-45}
+              textAnchor="end"
+              height={80}
+              tickFormatter={formatLabel}
             />
             <YAxis
               stroke="var(--muted-foreground)"
-              fontSize={12}
-              tickLine={false}
-              axisLine={false}
+              fontSize={13}
+              tickLine={{ stroke: "var(--border)" }}
+              axisLine={{ stroke: "var(--border)", strokeWidth: 1 }}
+              width={70}
               tickFormatter={formatValue}
             />
-            <Tooltip content={<CustomTooltip />} />
+            <Tooltip
+              content={<CustomTooltip />}
+              cursor={{ stroke: "var(--muted)", strokeWidth: 1, strokeDasharray: "5 5" }}
+            />
             <Area
               type="monotone"
               dataKey={yField}
               stroke="#8b5cf6"
-              strokeWidth={2}
+              strokeWidth={3}
               fill="url(#areaGradient)"
+              animationDuration={1200}
+              animationEasing="ease-in-out"
+              dot={{ fill: "#fff", stroke: "#8b5cf6", strokeWidth: 2, r: 5 }}
+              activeDot={{ r: 8, strokeWidth: 3 }}
             />
           </RechartsAreaChart>
         </ResponsiveContainer>
@@ -519,16 +607,27 @@ export const AreaChartViz = ({ viz }) => {
 // METRIC CARD COMPONENT
 // ============================================================================
 
-export const MetricCardViz = ({ viz }) => {
+export const MetricCardViz = ({ viz, index = 0 }) => {
   const { data = {}, title, description } = viz;
-  const { value, delta, unit, trend } = data;
+  const { value, delta, unit } = data;
+
+  // Different gradient colors for each metric card to avoid back-to-back same colors
+  const cardGradients = [
+    "from-purple-600 via-purple-500 to-violet-500",
+    "from-cyan-600 via-cyan-500 to-blue-500",
+    "from-emerald-600 via-emerald-500 to-teal-500",
+    "from-amber-600 via-amber-500 to-orange-500",
+    "from-pink-600 via-pink-500 to-rose-500",
+    "from-indigo-600 via-indigo-500 to-blue-600",
+  ];
+  const gradient = cardGradients[index % cardGradients.length];
 
   const [displayValue, setDisplayValue] = useState(0);
 
   useEffect(() => {
     if (typeof value === "number") {
-      const duration = 1200;
-      const steps = 60;
+      const duration = 1500;
+      const steps = 70;
       const increment = value / steps;
       let current = 0;
       const interval = setInterval(() => {
@@ -552,14 +651,19 @@ export const MetricCardViz = ({ viz }) => {
 
   return (
     <VizCard title={title} description={description}>
-      <div className="flex items-end justify-between">
+      <div className="flex items-end justify-between py-4">
         <motion.div
           initial={{ scale: 0.8, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
           transition={{ type: "spring", stiffness: 200, damping: 15, delay: 0.2 }}
+          className="flex items-baseline gap-2"
         >
-          <span className="text-4xl font-bold text-foreground">{formatValue(displayValue)}</span>
-          {unit && <span className="text-lg font-medium text-muted-foreground ml-1">{unit}</span>}
+          <span
+            className={`text-5xl font-bold bg-gradient-to-br ${gradient} bg-clip-text text-transparent drop-shadow-2xl`}
+          >
+            {formatValue(displayValue)}
+          </span>
+          {unit && <span className="text-xl font-semibold text-muted-foreground">{unit}</span>}
         </motion.div>
 
         {typeof delta === "number" && (
@@ -567,10 +671,16 @@ export const MetricCardViz = ({ viz }) => {
             initial={{ opacity: 0, x: 10 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ delay: 0.4, duration: 0.3 }}
-            className={`flex items-center gap-1 ${trendColor}`}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full ${
+              delta > 0
+                ? "bg-gradient-to-r from-emerald-500/20 to-emerald-600/20 border-2 border-emerald-500/40"
+                : delta < 0
+                  ? "bg-gradient-to-r from-red-500/20 to-red-600/20 border-2 border-red-500/40"
+                  : "bg-muted/50"
+            } shadow-lg ${trendColor}`}
           >
-            <TrendIcon size={18} />
-            <span className="text-sm font-medium">
+            <TrendIcon size={20} />
+            <span className="text-base font-semibold">
               {delta > 0 ? "+" : ""}
               {delta}%
             </span>
@@ -589,7 +699,7 @@ export const DataTableViz = ({ viz }) => {
   const { data = {}, title, description, config = {} } = viz;
   const columns = data.columns || [];
   const rows = data.rows || [];
-  const pageSize = Math.min(config.pageSize || 15, 25);
+  const pageSize = config.pageSize || 20; // No limit, show all data with pagination
 
   const [page, setPage] = useState(0);
   const [sortConfig, setSortConfig] = useState({ key: null, direction: "asc" });
@@ -649,19 +759,21 @@ export const DataTableViz = ({ viz }) => {
   return (
     <VizCard title={title} description={description} icon={TableIcon} className="overflow-hidden">
       <div className="overflow-x-auto -mx-5 px-5">
-        <table className="w-full text-sm">
+        <table className="w-full text-sm border-separate border-spacing-0">
           <thead>
-            <tr className="border-b border-border">
+            <tr className="bg-muted/40">
               {normalizedColumns.map((col) => (
                 <th
                   key={col.key}
                   onClick={() => handleSort(col.key)}
-                  className="text-left p-3 text-muted-foreground font-semibold whitespace-nowrap cursor-pointer hover:text-foreground transition-colors select-none"
+                  className="text-left p-4 text-muted-foreground font-bold whitespace-nowrap cursor-pointer hover:text-foreground hover:bg-muted/60 transition-colors select-none first:rounded-tl-xl last:rounded-tr-xl border-b-2 border-border"
                 >
-                  <span className="flex items-center gap-1">
+                  <span className="flex items-center gap-2">
                     {col.label}
                     {sortConfig.key === col.key && (
-                      <span className="text-xs">{sortConfig.direction === "asc" ? "↑" : "↓"}</span>
+                      <span className="text-sm font-bold text-primary">
+                        {sortConfig.direction === "asc" ? "↑" : "↓"}
+                      </span>
                     )}
                   </span>
                 </th>
@@ -677,7 +789,7 @@ export const DataTableViz = ({ viz }) => {
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: 10 }}
                   transition={{ delay: rowIdx * 0.02, duration: 0.2 }}
-                  className="border-b border-border/50 hover:bg-muted/30 transition-colors"
+                  className="border-b border-border/50 hover:bg-primary/5 transition-all duration-200 hover:shadow-sm"
                 >
                   {normalizedColumns.map((col) => {
                     const cellValue = row[col.key];
@@ -688,7 +800,7 @@ export const DataTableViz = ({ viz }) => {
                     return (
                       <td
                         key={col.key}
-                        className="p-3 text-foreground align-top max-w-[300px] truncate"
+                        className="p-4 text-foreground font-medium align-top max-w-[400px] truncate"
                         title={String(displayValue)}
                       >
                         {displayValue}
@@ -703,28 +815,28 @@ export const DataTableViz = ({ viz }) => {
       </div>
 
       {totalPages > 1 && (
-        <div className="flex items-center justify-between mt-4 pt-4 border-t border-border">
-          <span className="text-sm text-muted-foreground">
+        <div className="flex items-center justify-between mt-6 pt-5 border-t-2 border-border/50">
+          <span className="text-sm font-medium text-muted-foreground">
             Showing {page * pageSize + 1}–{Math.min((page + 1) * pageSize, rows.length)} of{" "}
-            {rows.length}
+            <span className="text-foreground font-bold">{rows.length}</span>
           </span>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-3">
             <button
               onClick={() => setPage((p) => Math.max(0, p - 1))}
               disabled={page === 0}
-              className="p-2 rounded-lg border border-border hover:bg-muted disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              className="p-2.5 rounded-xl border-2 border-border hover:bg-primary/10 hover:border-primary disabled:opacity-40 disabled:cursor-not-allowed transition-all duration-200 shadow-sm hover:shadow-md"
             >
-              <ChevronLeft size={16} />
+              <ChevronLeft size={18} />
             </button>
-            <span className="text-sm text-foreground px-2">
+            <span className="text-sm font-bold text-foreground px-3 py-1 bg-muted/50 rounded-lg">
               {page + 1} / {totalPages}
             </span>
             <button
               onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
               disabled={page >= totalPages - 1}
-              className="p-2 rounded-lg border border-border hover:bg-muted disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              className="p-2.5 rounded-xl border-2 border-border hover:bg-primary/10 hover:border-primary disabled:opacity-40 disabled:cursor-not-allowed transition-all duration-200 shadow-sm hover:shadow-md"
             >
-              <ChevronRight size={16} />
+              <ChevronRight size={18} />
             </button>
           </div>
         </div>
@@ -767,7 +879,7 @@ export const VizRenderer = ({ viz }) => {
     case "table":
       return <DataTableViz viz={viz} />;
     case "card":
-      return <MetricCardViz viz={viz} />;
+      return <MetricCardViz viz={viz} index={viz.index || 0} />;
     default:
       return (
         <VizCard title={viz.title || "Unsupported Chart"}>
@@ -778,68 +890,57 @@ export const VizRenderer = ({ viz }) => {
 };
 
 // ============================================================================
-// VISUALIZATION LIST - Renders array of visualizations
+// VISUALIZATION LIST - Renders array of visualizations in logical vertical order
 // ============================================================================
 
 export const VizList = ({ visualizations = [], agentName, className = "" }) => {
   if (!visualizations?.length) return null;
 
+  // Group visualizations by type for logical ordering
+  const metricCards = visualizations.filter((v) => v.vizType?.toLowerCase() === "card");
+  const barCharts = visualizations.filter((v) => v.vizType?.toLowerCase() === "bar");
+  const pieCharts = visualizations.filter((v) => v.vizType?.toLowerCase() === "pie");
+  const lineCharts = visualizations.filter((v) => v.vizType?.toLowerCase() === "line");
+  const areaCharts = visualizations.filter((v) => v.vizType?.toLowerCase() === "area");
+  const tables = visualizations.filter((v) => v.vizType?.toLowerCase() === "table");
+
+  // Logical order: Cards → Charts (Bar, Pie, Line, Area) → Tables
+  const orderedSections = [
+    { type: "cards", items: metricCards, cols: "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3" },
+    { type: "bar", items: barCharts, cols: "grid-cols-1" },
+    { type: "pie", items: pieCharts, cols: "grid-cols-1" },
+    { type: "line", items: lineCharts, cols: "grid-cols-1" },
+    { type: "area", items: areaCharts, cols: "grid-cols-1" },
+    { type: "tables", items: tables, cols: "grid-cols-1" },
+  ];
+
   return (
-    <div className={`space-y-6 ${className}`}>
-      {agentName && (
-        <motion.h2
-          initial={{ opacity: 0, y: -10 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="text-lg font-semibold text-foreground"
-        >
-          {agentName} Results
-        </motion.h2>
-      )}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Metric cards in a row */}
-        {visualizations
-          .filter((v) => v.vizType?.toLowerCase() === "card")
-          .map((viz, idx) => (
-            <motion.div
-              key={viz.id || `card-${idx}`}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: idx * 0.1 }}
-            >
-              <VizRenderer viz={viz} />
-            </motion.div>
-          ))}
-      </div>
+    <div className={`space-y-8 ${className}`}>
+      {orderedSections.map(({ type, items, cols }, sectionIdx) => {
+        if (!items.length) return null;
 
-      {/* Charts */}
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-        {visualizations
-          .filter((v) => ["bar", "pie", "line", "area"].includes(v.vizType?.toLowerCase()))
-          .map((viz, idx) => (
-            <motion.div
-              key={viz.id || `chart-${idx}`}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.2 + idx * 0.1 }}
-            >
-              <VizRenderer viz={viz} />
-            </motion.div>
-          ))}
-      </div>
-
-      {/* Tables - full width */}
-      {visualizations
-        .filter((v) => v.vizType?.toLowerCase() === "table")
-        .map((viz, idx) => (
-          <motion.div
-            key={viz.id || `table-${idx}`}
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.4 + idx * 0.1 }}
-          >
-            <VizRenderer viz={viz} />
-          </motion.div>
-        ))}
+        return (
+          <div key={type} className="space-y-6">
+            <div className={`grid ${cols} gap-6`}>
+              {items.map((viz, idx) => (
+                <motion.div
+                  key={viz.id || `${type}-${idx}`}
+                  initial={{ opacity: 0, y: 30 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{
+                    delay: sectionIdx * 0.1 + idx * 0.05,
+                    duration: 0.5,
+                    ease: [0.4, 0, 0.2, 1],
+                  }}
+                  className="w-full"
+                >
+                  <VizRenderer viz={{ ...viz, index: idx }} />
+                </motion.div>
+              ))}
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 };

@@ -56,12 +56,20 @@ export function useChatManager() {
       const sessionId = createRes.sessionId;
 
       // Send first prompt immediately
+      console.log("[ChatManager] Sending analyze request...");
       const analyzeRes = await api.analyze(sessionId, firstPrompt);
       console.log("[ChatManager] Analyze response:", analyzeRes);
 
       // Backend returns full session
       const session = analyzeRes.session;
       console.log("[ChatManager] Session from analyze:", session);
+      console.log("[ChatManager] AgentsData structure:", session?.agentsData);
+      if (session?.agentsData && Array.isArray(session.agentsData)) {
+        console.log(
+          "[ChatManager] Latest agents entry:",
+          session.agentsData[session.agentsData.length - 1],
+        );
+      }
 
       if (session && session.sessionId) {
         console.log("[ChatManager] Adding session to chats:", session);
@@ -77,7 +85,8 @@ export function useChatManager() {
         throw new Error("Invalid session returned from server");
       }
 
-      return session;
+      // Return both session and queryType so caller knows if agents ran
+      return { session, queryType: analyzeRes.queryType };
     } catch (error) {
       console.error("[ChatManager] Error in createChatFromPrompt:", error);
       throw error;
@@ -88,7 +97,7 @@ export function useChatManager() {
 
   const sendPrompt = useCallback(
     async (prompt) => {
-      if (!activeChatId) return;
+      if (!activeChatId) return { queryType: null };
 
       setIsLoading(true);
       try {
@@ -102,6 +111,9 @@ export function useChatManager() {
             prev.map((c) => (c.sessionId === updatedSession.sessionId ? updatedSession : c)),
           );
         }
+
+        // Return queryType so caller knows if agents ran
+        return { queryType: response.queryType };
       } finally {
         setIsLoading(false);
       }
@@ -137,7 +149,7 @@ export function useChatManager() {
       try {
         await api.deleteSession(sessionId);
       } catch {
-        console.log("Error in deleteChat")
+        console.log("Error in deleteChat");
       }
 
       setChats((prev) => prev.filter((c) => c.sessionId !== sessionId));

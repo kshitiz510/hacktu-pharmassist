@@ -62,7 +62,7 @@ def fetch_clinical_trials(
 
         # Prepare trial list with key fields for display
         trials_list = []
-        for trial in result["trials"][:50]:  # Limit to first 50 for readability
+        for trial in result["trials"]:  # Return all trials
             trials_list.append(
                 {
                     "nct_id": trial.get("nct_id"),

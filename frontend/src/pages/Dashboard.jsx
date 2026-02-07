@@ -239,7 +239,8 @@ export default function GeminiDashboard() {
     setApiError(null);
     setIsPinned(false);
     setSelectedAgent(null);
-    setShowAgentFlowLocal(workflowState.showAgentFlow ?? false);
+    // Show chat view by default for new or existing chats
+    setShowAgentFlowLocal(false);
   }, [activeChatId]);
 
   const handleNewChat = () => {
@@ -265,10 +266,17 @@ export default function GeminiDashboard() {
     setApiError(null);
 
     try {
+      let result;
       if (!activeChatId) {
-        await createChatFromPrompt(text);
+        result = await createChatFromPrompt(text);
       } else {
-        await sendPrompt(text);
+        result = await sendPrompt(text);
+      }
+
+      // Only open agent panel and collapse sidebar when agents actually run
+      if (result?.queryType === "actionable") {
+        setShowAgentFlowLocal(true);
+        setIsSidebarCollapsed(true);
       }
     } catch {
       setApiError("Failed to process prompt");
@@ -290,7 +298,14 @@ export default function GeminiDashboard() {
   };
 
   const handleToggleAgentFlow = () => {
-    setShowAgentFlowLocal((prev) => !prev);
+    setShowAgentFlowLocal((prev) => {
+      const newValue = !prev;
+      // Auto-collapse sidebar when opening agent panel
+      if (newValue) {
+        setIsSidebarCollapsed(true);
+      }
+      return newValue;
+    });
   };
 
   // Get the current display state
