@@ -48,6 +48,14 @@ export const api = {
     if (!response.ok) throw new Error("Failed to delete session");
     return response.json();
   },
+
+  async generateReport(promptId) {
+    const response = await fetch(`${API_BASE_URL}/generate-report/${promptId}`, {
+      method: "GET",
+    });
+    if (!response.ok) throw new Error("Failed to generate report");
+    return response.blob();
+  },
 };
 
 export default api;
