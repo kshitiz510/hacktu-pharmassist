@@ -4,7 +4,7 @@ from typing import Optional
 import uuid
 from datetime import datetime
 from fastapi import Request
-from pymongo import MongoClient, ASCENDING
+from pymongo import MongoClient
 from bson import ObjectId
 
 from app.core.config import MONGO_URI, MONGO_DB_NAME, MONGO_CHAT_COLLECTION
@@ -24,47 +24,16 @@ class DatabaseManager:
             self.client.admin.command("ping")
             print("[DB] Connected to MongoDB successfully")
 
-            # Ensure notifications collection & indexes
-            self._ensure_notifications_indexes()
-
         except Exception as e:  # pragma: no cover - connectivity errors surface early
             print(f"[DB] MongoDB connection failed: {e}")
             raise
-
-    def _ensure_notifications_indexes(self):
-        """Create indexes on the notifications collection for fast lookup."""
-        try:
-            notif = self.db["notifications"]
-            notif.create_index(
-                [("sessionId", ASCENDING), ("promptId", ASCENDING), ("enabled", ASCENDING)],
-                name="idx_session_prompt_enabled",
-            )
-            notif.create_index(
-                [("notificationId", ASCENDING)],
-                name="idx_notification_id",
-                unique=True,
-            )
-            print("[DB] Notifications indexes ensured")
-        except Exception as e:
-            print(f"[DB] Warning: could not create notifications indexes: {e}")
     
     def get_session(self, session_id: str):
         doc = self.sessions.find_one({"sessionId": session_id})
         return self._serialize(doc)
 
-    def list_sessions(self, skip: int = 0, limit: int = 50):
-        """Return lightweight session summaries (no agentsData/chatHistory) with pagination."""
-        projection = {
-            "agentsData": 0,
-            "workflowState": 0,
-            "chatHistory": 0,
-        }
-        docs = list(
-            self.sessions.find({}, projection)
-            .sort("_id", -1)
-            .skip(skip)
-            .limit(limit)
-        )
+    def list_sessions(self):
+        docs = list(self.sessions.find({}))
         return self._serialize(docs)
 
     def _serialize(self, obj):

@@ -260,65 +260,6 @@ export const api = {
       throw error;
     }
   },
-
-  // ===== NEWS MONITOR API =====
-
-  async enableNotification(sessionId, promptId, tagName = "", enabled = true) {
-    const response = await fetch(`${API_BASE_URL}/news/enable`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ sessionId, promptId, tagName, enabled }),
-    });
-    if (!response.ok) {
-      const err = await response.json().catch(() => ({ detail: "Failed" }));
-      throw new Error(err.detail || "Failed to toggle notification");
-    }
-    return response.json();
-  },
-
-  async recheckNotification(sessionId, promptId, rerunAnalysis = false) {
-    const response = await fetch(`${API_BASE_URL}/news/recheck`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ sessionId, promptId, rerunAnalysis }),
-    });
-    if (!response.ok) {
-      const err = await response.json().catch(() => ({ detail: "Recheck failed" }));
-      throw new Error(err.detail || "Recheck failed");
-    }
-    return response.json();
-  },
-
-  async getMonitored(sessionId) {
-    const response = await fetch(`${API_BASE_URL}/news/monitored?sessionId=${encodeURIComponent(sessionId)}`);
-    if (!response.ok) throw new Error("Failed to get monitored list");
-    return response.json();
-  },
-
-  async getAllMonitored() {
-    const response = await fetch(`${API_BASE_URL}/news/monitored-all`);
-    if (!response.ok) throw new Error("Failed to get all monitored");
-    return response.json();
-  },
-
-  async broadcastIntel(text) {
-    const response = await fetch(`${API_BASE_URL}/news/broadcast-intel`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text }),
-    });
-    if (!response.ok) {
-      const err = await response.json().catch(() => ({ detail: "Failed" }));
-      throw new Error(err.detail || "Intel broadcast failed");
-    }
-    return response.json();
-  },
-
-  async getNotificationDetails(notificationId) {
-    const response = await fetch(`${API_BASE_URL}/news/details/${encodeURIComponent(notificationId)}`);
-    if (!response.ok) throw new Error("Failed to get notification details");
-    return response.json();
-  },
 };
 
 export default api;

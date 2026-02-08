@@ -1,5 +1,3 @@
-@import url("https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=DM+Sans:wght@300;400;500;600&display=swap");
-
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -12,60 +10,69 @@
 
 @layer base {
   :root {
-    /* LIGHT THEME - Clinical Teal */
-    --background: 210 24% 97%;
-    --foreground: 216 28% 12%;
-    --card: 210 20% 99%;
-    --card-foreground: 216 28% 12%;
-    --popover: 210 20% 99%;
-    --popover-foreground: 216 28% 12%;
-    --primary: 174 62% 38%;
+    /* LIGHT THEME - Clinical Lab (emergency fallback) */
+    --background: 0 0% 100%;
+    --foreground: 220 13% 9%;
+    --card: 0 0% 100%;
+    --card-foreground: 220 13% 9%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 220 13% 9%;
+    --primary: 221 83% 53%;
     --primary-foreground: 0 0% 100%;
-    --secondary: 210 18% 93%;
-    --secondary-foreground: 216 28% 12%;
-    --muted: 210 16% 94%;
-    --muted-foreground: 215 14% 42%;
-    --accent: 220 56% 48%;
-    --accent-foreground: 0 0% 100%;
-    --destructive: 0 72% 50%;
+    --secondary: 220 9% 96%;
+    --secondary-foreground: 220 13% 9%;
+    --muted: 220 9% 96%;
+    --muted-foreground: 220 9% 46%;
+    --accent: 220 9% 96%;
+    --accent-foreground: 220 13% 9%;
+    --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 100%;
-    --border: 214 16% 86%;
-    --input: 214 16% 86%;
-    --ring: 174 62% 38%;
-    --radius: 0.5rem;
+    --border: 220 9% 88%;
+    --input: 220 9% 88%;
+    --ring: 221 83% 53%;
+    --radius: 0.25rem;
   }
 
-  /* DARK THEME - Deep Navy + Teal */
+  /* DARK THEME - Premium Pharmaceutical Interface */
   .dark {
-    --background: 222 47% 6%;       /* #0a0f1a - deep navy */
-    --foreground: 210 20% 92%;      /* #e4e9ef - cool white */
+    /* Rich dark backgrounds - deep charcoal with subtle warmth */
+    --background: 240 6% 7%; /* #111114 - rich dark */
+    --foreground: 60 5% 94%; /* #f0f0ec - warm white */
 
-    --card: 222 40% 9%;             /* #0f1628 - raised surface */
-    --card-foreground: 210 20% 92%;
+    /* Surface layers - layered depth */
+    --card: 240 5% 10%; /* #18181c - elevated surface */
+    --card-foreground: 60 5% 94%;
 
-    --popover: 222 40% 9%;
-    --popover-foreground: 210 20% 92%;
+    --popover: 240 5% 10%;
+    --popover-foreground: 60 5% 94%;
 
-    --primary: 174 62% 45%;         /* #2bb5a0 - clinical teal */
-    --primary-foreground: 222 47% 6%;
+    /* Primary accent - sophisticated emerald/teal for pharma */
+    --primary: 168 76% 42%; /* #1aab8a - modern teal-green */
+    --primary-foreground: 0 0% 100%;
 
-    --secondary: 222 32% 13%;       /* #161e30 - subtle elevation */
-    --secondary-foreground: 210 20% 92%;
+    /* Secondary surfaces */
+    --secondary: 240 5% 13%; /* #1f1f24 - subtle elevation */
+    --secondary-foreground: 60 5% 94%;
 
-    --muted: 222 28% 15%;           /* #1a2236 */
-    --muted-foreground: 216 12% 56%;/* #828da0 */
+    /* Muted content */
+    --muted: 240 5% 13%;
+    --muted-foreground: 240 4% 55%; /* #88888f - balanced gray */
 
-    --accent: 220 56% 52%;          /* #4478d4 - navy-blue accent */
-    --accent-foreground: 210 20% 92%;
+    /* Accent - interactive states */
+    --accent: 240 5% 16%; /* #26262c - hover states */
+    --accent-foreground: 60 5% 94%;
 
-    --destructive: 0 72% 52%;
-    --destructive-foreground: 210 20% 92%;
+    /* Destructive */
+    --destructive: 0 72% 55%; /* #e05252 - refined red */
+    --destructive-foreground: 0 0% 100%;
 
-    --border: 222 24% 18%;          /* #212d42 - subtle border */
-    --input: 222 24% 18%;
-    --ring: 174 62% 45%;
+    /* Borders - refined separation */
+    --border: 240 5% 18%; /* #2c2c32 - subtle borders */
+    --input: 240 5% 18%;
+    --ring: 168 76% 42%;
 
-    --radius: 0.5rem;
+    /* Border radius */
+    --radius: 0.375rem; /* 6px - modern rounding */
   }
 }
 
@@ -87,27 +94,18 @@
 
   body {
     @apply bg-background text-foreground;
-    font-family: "DM Sans", "Helvetica Neue", Arial, sans-serif;
+    font-family:
+      "Inter",
+      -apple-system,
+      BlinkMacSystemFont,
+      "Segoe UI",
+      sans-serif;
     font-feature-settings: "cv02", "cv03", "cv04", "cv11";
     margin: 0;
     min-height: 100vh;
     height: 100%;
     width: 100%;
     overflow-y: auto;
-    background-image:
-      radial-gradient(ellipse at 10% 0%, hsl(var(--primary) / 0.07), transparent 50%),
-      radial-gradient(ellipse at 90% 100%, hsl(var(--accent) / 0.06), transparent 50%),
-      linear-gradient(180deg, hsl(var(--background)) 0%, hsl(var(--background)) 100%);
-    background-attachment: fixed;
-  }
-
-  h1,
-  h2,
-  h3,
-  h4 {
-    font-family: "Plus Jakarta Sans", "Helvetica Neue", Arial, sans-serif;
-    font-weight: 700;
-    letter-spacing: -0.025em;
   }
 
   /* Focus states - accessible, minimal */
@@ -149,58 +147,6 @@
   }
 }
 
-@layer components {
-  .font-display {
-    font-family: "Plus Jakarta Sans", "Helvetica Neue", Arial, sans-serif;
-    font-weight: 700;
-  }
-
-  .font-body {
-    font-family: "DM Sans", "Helvetica Neue", Arial, sans-serif;
-  }
-
-  .dossier-shell {
-    position: relative;
-    background-image:
-      radial-gradient(ellipse at 20% 10%, hsl(var(--primary) / 0.04), transparent 60%),
-      radial-gradient(ellipse at 80% 90%, hsl(var(--accent) / 0.03), transparent 60%);
-  }
-
-  .dossier-panel {
-    background: linear-gradient(
-      180deg,
-      hsl(var(--card) / 0.95) 0%,
-      hsl(var(--card) / 0.85) 100%
-    );
-    border: 1px solid hsl(var(--border) / 0.6);
-    box-shadow:
-      0 1px 0 hsl(var(--primary) / 0.06) inset,
-      0 20px 40px -12px hsl(222 47% 4% / 0.4);
-  }
-
-  .dossier-label {
-    text-transform: uppercase;
-    letter-spacing: 0.18em;
-    font-size: 0.65rem;
-    color: hsl(var(--muted-foreground));
-  }
-
-  .dossier-chip {
-    border: 1px solid hsl(var(--border));
-    background: hsl(var(--secondary) / 0.7);
-    box-shadow: inset 0 1px 0 hsl(var(--foreground) / 0.06);
-  }
-
-  /* Reset Recharts legend text to prevent inherited letter-spacing */
-  .recharts-legend-item-text,
-  .recharts-legend-wrapper,
-  .recharts-default-legend {
-    letter-spacing: normal !important;
-    word-spacing: normal !important;
-    text-transform: none !important;
-  }
-}
-
 /* ─────────────────────────────────────────────────────────────────────────────────────
    GLASSMORPHISM & ANIMATIONS
    ───────────────────────────────────────────────────────────────────────────────────── */
@@ -225,7 +171,7 @@
 
   /* Gradient text - premium gradient */
   .gradient-text {
-    @apply bg-gradient-to-r from-teal-400 via-cyan-400 to-blue-400 bg-clip-text text-transparent;
+    @apply bg-gradient-to-r from-emerald-400 via-teal-400 to-cyan-400 bg-clip-text text-transparent;
   }
 }
 

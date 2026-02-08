@@ -37,49 +37,49 @@ const agentIcons = {
   report: FileBarChart,
 };
 
-// Agent color mapping — aligned with Teal + Deep Navy theme
+// Agent color mapping
 const agentColors = {
   iqvia: {
-    primary: "text-sky-400",
-    bg: "bg-sky-500/8",
-    border: "border-sky-500/25",
-    gradient: "from-sky-500/15 via-sky-500/5 to-transparent",
+    primary: "text-blue-500",
+    bg: "bg-blue-500/10",
+    border: "border-blue-500/30",
+    gradient: "from-blue-500/20 via-blue-500/10 to-transparent",
   },
   exim: {
-    primary: "text-teal-400",
-    bg: "bg-teal-500/8",
-    border: "border-teal-500/25",
-    gradient: "from-teal-500/15 via-teal-500/5 to-transparent",
+    primary: "text-teal-500",
+    bg: "bg-teal-500/10",
+    border: "border-teal-500/30",
+    gradient: "from-teal-500/20 via-teal-500/10 to-transparent",
   },
   patent: {
-    primary: "text-amber-400",
-    bg: "bg-amber-500/8",
-    border: "border-amber-500/25",
-    gradient: "from-amber-500/15 via-amber-500/5 to-transparent",
+    primary: "text-amber-500",
+    bg: "bg-amber-500/10",
+    border: "border-amber-500/30",
+    gradient: "from-amber-500/20 via-amber-500/10 to-transparent",
   },
   clinical: {
-    primary: "text-emerald-400",
-    bg: "bg-emerald-500/8",
-    border: "border-emerald-500/25",
-    gradient: "from-emerald-500/15 via-emerald-500/5 to-transparent",
+    primary: "text-emerald-500",
+    bg: "bg-emerald-500/10",
+    border: "border-emerald-500/30",
+    gradient: "from-emerald-500/20 via-emerald-500/10 to-transparent",
   },
   internal: {
-    primary: "text-cyan-400",
-    bg: "bg-cyan-500/8",
-    border: "border-cyan-500/25",
-    gradient: "from-cyan-500/15 via-cyan-500/5 to-transparent",
+    primary: "text-pink-500",
+    bg: "bg-pink-500/10",
+    border: "border-pink-500/30",
+    gradient: "from-pink-500/20 via-pink-500/10 to-transparent",
   },
   web: {
-    primary: "text-indigo-400",
-    bg: "bg-indigo-500/8",
-    border: "border-indigo-500/25",
-    gradient: "from-indigo-500/15 via-indigo-500/5 to-transparent",
+    primary: "text-cyan-500",
+    bg: "bg-cyan-500/10",
+    border: "border-cyan-500/30",
+    gradient: "from-cyan-500/20 via-cyan-500/10 to-transparent",
   },
   report: {
-    primary: "text-violet-400",
-    bg: "bg-violet-500/8",
-    border: "border-violet-500/25",
-    gradient: "from-violet-500/15 via-violet-500/5 to-transparent",
+    primary: "text-violet-500",
+    bg: "bg-violet-500/10",
+    border: "border-violet-500/30",
+    gradient: "from-violet-500/20 via-violet-500/10 to-transparent",
   },
 };
 
@@ -112,21 +112,20 @@ export function AgentOutputWrapper({
       className={className}
     >
       <Card
-        className={`overflow-hidden bg-gradient-to-br ${colors.gradient} to-card/80 border ${colors.border} shadow-lg backdrop-blur-sm rounded-2xl`}
+        className={`overflow-hidden bg-gradient-to-br ${colors.gradient} to-card border ${colors.border} shadow-lg`}
       >
         {/* Header */}
-        <CardHeader className="pb-3 border-b border-white/[0.04]">
+        <CardHeader className="pb-3 border-b border-border/50">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <motion.div
-                className={`p-2.5 rounded-xl ${colors.bg} border ${colors.border} backdrop-blur-sm`}
-                whileHover={{ scale: 1.05, rotate: 2 }}
-                transition={{ type: "spring", stiffness: 300 }}
+                className={`p-2.5 rounded-xl ${colors.bg} border ${colors.border}`}
+                whileHover={{ scale: 1.05 }}
               >
                 <Icon className={colors.primary} size={22} />
               </motion.div>
               <div>
-                <CardTitle className="text-lg font-bold text-foreground tracking-tight font-[family-name:var(--font-heading)]">{title}</CardTitle>
+                <CardTitle className="text-lg font-bold text-foreground">{title}</CardTitle>
                 {subtitle && <p className="text-sm text-muted-foreground mt-0.5">{subtitle}</p>}
               </div>
             </div>

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Query
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 
 from app.api.schemas import SessionCreateRequest
 from app.core.db import DatabaseManager, get_db
@@ -24,7 +24,7 @@ async def create_session(
 async def list_sessions(
     limit: int = 50, skip: int = 0, db: DatabaseManager = Depends(get_db)
 ):
-    sessions = db.list_sessions(skip=skip, limit=limit)
+    sessions = db.list_sessions()[skip : skip + limit]
     return {"status": "success", "sessions": sessions}
 
 
@@ -50,7 +50,6 @@ async def delete_session(session_id: str, db: DatabaseManager = Depends(get_db))
 async def upload_document(
     session_id: str,
     file: UploadFile = File(...),
-    tagForMonitoring: str = Query(default="", description="promptId to trigger news comparator after upload"),
     db: DatabaseManager = Depends(get_db)
 ):
     """
@@ -84,28 +83,6 @@ async def upload_document(
         
         # Store document for session
         store_document_for_session(session_id, filename, parsed_content, file_type)
-
-        # ── Optional: trigger news comparator for a monitored promptId ──
-        monitoring_result = None
-        if tagForMonitoring:
-            try:
-                from app.agents.news_agent.news_agent import run_news_agent
-                # Find existing agent data for the tagged promptId
-                old_agent_data = None
-                for entry in session.get("agentsData", []):
-                    if entry.get("promptId") == tagForMonitoring:
-                        old_agent_data = entry.get("agents", {})
-                        break
-                if old_agent_data:
-                    monitoring_result = run_news_agent(
-                        session_id=session_id,
-                        prompt_id=tagForMonitoring,
-                        old_agent_data=old_agent_data,
-                        new_document_text=parsed_content,
-                        db=db,
-                    )
-            except Exception:
-                import traceback; traceback.print_exc()
         
         return {
             "status": "success",
@@ -113,7 +90,6 @@ async def upload_document(
             "filename": filename,
             "file_type": file_type,
             "content_length": len(parsed_content),
-            "monitoringResult": monitoring_result,
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to process file: {str(e)}")

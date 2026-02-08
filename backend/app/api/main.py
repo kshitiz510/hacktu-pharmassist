@@ -19,7 +19,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.routes import analysis, health, sessions, voice, report, news
+from app.api.routes import analysis, health, sessions, voice
 from app.core.config import API_METADATA, CORS_ORIGINS
 from app.core.db import init_db
 
@@ -45,8 +45,6 @@ app.include_router(health.router)
 app.include_router(sessions.router)
 app.include_router(analysis.router)
 app.include_router(voice.router)
-app.include_router(report.router)
-app.include_router(news.router)
 
 
 if __name__ == "__main__":

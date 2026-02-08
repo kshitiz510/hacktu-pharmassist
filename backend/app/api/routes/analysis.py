@@ -1,32 +1,17 @@
-from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
-from fastapi.responses import FileResponse, Response
+from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import FileResponse
 import uuid
 import json
-import tempfile
-import os
-from pathlib import Path
 
 from app.api.schemas import AnalysisRequest
 from app.core.db import DatabaseManager, get_db
 from app.services.task_planning import plan_tasks
 from app.services.llm_orchestrator import plan_and_run_session
-from app.services.generate_pdf_report import create_comparison_pdf_report
-from app.services.report_data_manager import report_data_manager
-from app.agents.report_generator_agent import run_report_generator_agent
-from app.agents.report_generator_agent.tools import convert_html_to_pdf_async
+from app.services.generate_pdf_report import create_pdf_report, create_comparison_pdf_report
 from app.services.query_classifier import classify_query
 
 
 router = APIRouter(tags=["analysis"])
-
-
-def cleanup_temp_file(file_path: str):
-    """Cleanup temporary file after response is sent"""
-    try:
-        if os.path.exists(file_path):
-            os.unlink(file_path)
-    except Exception:
-        pass  # Ignore cleanup errors
 
 
 def update_session(db: DatabaseManager, session: dict):
@@ -370,108 +355,9 @@ async def execute(sessionId: str, db: DatabaseManager = Depends(get_db)):
 # ---------------- REPORT DOWNLOAD ---------------- #
 
 @router.get("/generate-report/{prompt_id}")
-def generate_report(prompt_id: str, background_tasks: BackgroundTasks, db: DatabaseManager = Depends(get_db)):
-    # First try to get data from our cached report data manager
-    cached_data = report_data_manager.get_report_data(prompt_id)
-    
-    # Check if cached data actually has meaningful content (not just empty dicts)
-    has_meaningful_data = False
-    if cached_data:
-        agents_data = report_data_manager.get_formatted_agents_data(prompt_id)
-        # Check if any agent has actual data
-        for agent_key, agent_data in agents_data.items():
-            if agent_data and isinstance(agent_data, dict) and len(agent_data) > 0:
-                has_meaningful_data = True
-                break
-        print(f"🔍 Cached data check for prompt_id {prompt_id}: has_meaningful_data={has_meaningful_data}")
-    
-    if cached_data and has_meaningful_data:
-        print(f"🔄 Using cached data for prompt_id: {prompt_id}")
-        try:
-            # Get the data
-            agents_data = report_data_manager.get_formatted_agents_data(prompt_id)
-            drug_name = cached_data['drug_name']
-            indication = cached_data['indication']
-            
-            # Generate report using cached data
-            result = run_report_generator_agent(
-                drug_name=drug_name,
-                indication=indication,
-                agents_data=agents_data,
-                use_crew=False,
-                output_format="html",
-            )
-            
-            if result["status"] != "success":
-                raise HTTPException(status_code=500, detail=result.get("error", "Report generation failed"))
-            
-            # Convert HTML to PDF using Playwright
-            html_content = result["html_content"]
-            
-            # Create safe filename with timestamp
-            from datetime import datetime
-            from pathlib import Path
-            safe_drug = "".join(c if c.isalnum() or c in (' ', '-', '_') else '_' for c in drug_name)
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            filename = f"{safe_drug}_Intelligence_Report.pdf"
-            
-            # Create generated_reports directory if it doesn't exist (absolute path)
-            backend_dir = Path(__file__).resolve().parent.parent.parent.parent
-            reports_dir = backend_dir / "generated_reports"
-            reports_dir.mkdir(exist_ok=True)
-            
-            # Save to generated_reports folder
-            permanent_path = reports_dir / f"{safe_drug}_{timestamp}.pdf"
-            
-            # Convert to PDF
-            import asyncio
-            try:
-                loop = asyncio.get_event_loop()
-            except RuntimeError:
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-            
-            if loop.is_running():
-                # If event loop is running, use thread
-                import concurrent.futures
-                with concurrent.futures.ThreadPoolExecutor() as executor:
-                    future = executor.submit(
-                        asyncio.run,
-                        convert_html_to_pdf_async(html_content, str(permanent_path))
-                    )
-                    future.result()
-            else:
-                loop.run_until_complete(convert_html_to_pdf_async(html_content, str(permanent_path)))
-            
-            # Create temporary copy for FileResponse (gets cleaned up)
-            with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_file:
-                tmp_path = tmp_file.name
-            
-            # Copy the permanent file to temp location for response
-            import shutil
-            shutil.copy2(permanent_path, tmp_path)
-            
-            print(f"📄 Report saved to: {permanent_path}")
-            
-            # Add background task to cleanup temporary file only
-            background_tasks.add_task(cleanup_temp_file, tmp_path)
-            
-            return FileResponse(
-                path=tmp_path,
-                filename=filename,
-                media_type="application/pdf"
-            )
-            
-        except Exception as e:
-            import traceback
-            traceback.print_exc()
-            raise HTTPException(status_code=500, detail=f"Report generation failed: {str(e)}")
-    
-    # Fallback to MongoDB query if no cached data found (or cached data was empty)
-    print(f"📂 Falling back to MongoDB for prompt_id: {prompt_id}")
+def generate_report(prompt_id: str, db: DatabaseManager = Depends(get_db)):
     session = db.sessions.find_one(
-        {"agentsData.promptId": prompt_id}, 
-        {"agentsData.$": 1, "title": 1, "chatHistory": 1, "sessionId": 1}
+        {"agentsData.promptId": prompt_id}, {"agentsData.$": 1, "title": 1, "chatHistory": 1}
     )
 
     if not session or "agentsData" not in session:
@@ -486,272 +372,38 @@ def generate_report(prompt_id: str, background_tasks: BackgroundTasks, db: Datab
     indication = extracted_params.get("indication") or "general"
 
     try:
-        # Debug: Print the actual data structure
-        print(f"🔍 DEBUG - Entry keys: {list(entry.keys())}")
-        print(f"🔍 DEBUG - Agents keys: {list(agents.keys())}")
-        print(f"🔍 DEBUG - Extracted params: {extracted_params}")
-        print(f"🔍 DEBUG - Drug name: {drug_name}, Indication: {indication}")
-        
-        # Check what data we actually have
-        for agent_key in agents.keys():
-            print(f"🔍 DEBUG - {agent_key}: {type(agents[agent_key])}, keys: {list(agents[agent_key].keys()) if isinstance(agents[agent_key], dict) else 'not dict'}")
-        
-        # Helper function to extract agent data - handles both key formats and nested structure
-        def extract_agent_data(agents_dict, *possible_keys):
-            """Extract data from agent results, handling multiple key formats and nested structure.
-            
-            MongoDB structure is: agents.{key}.data.data.{actual fields}
-            - agents.iqvia = {timestamp, query, data: {status, data: {actual data}, visualizations}}
-            """
-            for key in possible_keys:
-                agent_result = agents_dict.get(key)
-                if agent_result and isinstance(agent_result, dict):
-                    # Structure: {timestamp, query, data: {...}}
-                    outer_data = agent_result.get('data', {})
-                    if isinstance(outer_data, dict):
-                        # Structure: {status, data: {actual data}, visualizations}
-                        inner_data = outer_data.get('data', {})
-                        if isinstance(inner_data, dict) and len(inner_data) > 0:
-                            print(f"🔍 DEBUG - Extracted {key} data with {len(inner_data)} keys")
-                            return inner_data
-                        # Fallback: maybe the outer_data IS the actual data
-                        if len(outer_data) > 0 and 'status' not in outer_data:
-                            return outer_data
-            return {}
-        
-        # Prepare data for new report generator - extract actual agent data
-        # Try multiple key formats: lowercase (iqvia), uppercase (IQVIA_AGENT), short (internal)
-        agents_data = {
-            "iqvia": extract_agent_data(agents, "iqvia", "IQVIA_AGENT"),
-            "clinical": extract_agent_data(agents, "clinical", "CLINICAL_AGENT"),
-            "patent": extract_agent_data(agents, "patent", "PATENT_AGENT"),
-            "exim": extract_agent_data(agents, "exim", "EXIM_AGENT"),
-            "internal_knowledge": extract_agent_data(agents, "internal", "internal_knowledge", "INTERNAL_KNOWLEDGE_AGENT"),
-            "web_intelligence": extract_agent_data(agents, "web", "web_intelligence", "WEB_INTELLIGENCE_AGENT"),
-        }
-        
-        print(f"🔍 DEBUG - Agents data prepared: {list(agents_data.keys())}")
-        print(f"🔍 DEBUG - IQVIA data type: {type(agents_data['iqvia'])}")
-        if isinstance(agents_data['iqvia'], dict):
-            print(f"🔍 DEBUG - IQVIA keys: {list(agents_data['iqvia'].keys())}")
-        
-        # Store the agent data in report data manager for easy access
-        storage_key = report_data_manager.store_report_data(
-            session_id=session.get("sessionId", "unknown_session"),
-            prompt_id=prompt_id,
+        result = create_pdf_report(
             drug_name=drug_name,
             indication=indication,
-            agents_data=agents_data
-        )
-        print(f"🔍 DEBUG - Stored data with key: {storage_key}")
-        
-        # DEBUG: Save the MongoDB-extracted data for debugging
-        try:
-            import json
-            from pathlib import Path
-            from datetime import datetime
-            
-            debug_dir = Path(__file__).resolve().parent.parent.parent.parent / "debug_reports"
-            debug_dir.mkdir(exist_ok=True)
-            
-            safe_drug = "".join(c if c.isalnum() or c in (' ', '-', '_') else '_' for c in drug_name)
-            debug_file = debug_dir / f"mongodb_data_{safe_drug}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
-            
-            debug_data = {
-                "source": "mongodb",
-                "prompt_id": prompt_id,
-                "drug_name": drug_name,
-                "indication": indication,
-                "timestamp": datetime.now().isoformat(),
-                "agents_data": agents_data,
-                "agents_data_summary": {
-                    k: {
-                        "type": type(v).__name__,
-                        "keys": list(v.keys()) if isinstance(v, dict) else None,
-                        "length": len(v) if isinstance(v, (list, dict, str)) else None,
-                        "sample_keys": list(v.keys())[:10] if isinstance(v, dict) and len(v) > 5 else None
-                    } for k, v in agents_data.items()
-                }
+            iqvia_data=agents.get("IQVIA_AGENT", {}).get("data", {}),
+            exim_data=agents.get("EXIM_AGENT", {}).get("data", {}),
+            patent_data=agents.get("PATENT_AGENT", {}).get("data", {}),
+            clinical_data=agents.get("CLINICAL_AGENT", {}).get("data", {}),
+            internal_knowledge_data=agents.get("INTERNAL_KNOWLEDGE_AGENT", {}).get("data", {}),
+            web_intelligence_data=agents.get("WEB_INTELLIGENCE_AGENT", {}).get("data", {}),
+            report_data=agents.get("REPORT_GENERATOR", {}).get("data", {}),
+            # Pass visualizations for chart rendering
+            visualizations={
+                "iqvia": agents.get("IQVIA_AGENT", {}).get("data", {}).get("visualizations", []),
+                "clinical": agents.get("CLINICAL_AGENT", {}).get("data", {}).get("visualizations", []),
+                "patent": agents.get("PATENT_AGENT", {}).get("data", {}).get("visualizations", []),
+                "exim": agents.get("EXIM_AGENT", {}).get("data", {}).get("visualizations", []),
+                "web": agents.get("WEB_INTELLIGENCE_AGENT", {}).get("data", {}).get("visualizations", []),
             }
-            
-            with open(debug_file, 'w') as f:
-                json.dump(debug_data, f, indent=2, default=str)
-                
-            print(f"🔍 DEBUG: MongoDB agents data saved to {debug_file}")
-        except Exception as e:
-            print(f"⚠️ DEBUG: Failed to save debug data: {e}")
-        
-        # Generate report using new report generator
-        result = run_report_generator_agent(
-            drug_name=drug_name,
-            indication=indication,
-            agents_data=agents_data,
-            use_crew=False,
-            output_format="html",
         )
-        
-        if result["status"] != "success":
-            raise HTTPException(status_code=500, detail=result.get("error", "Report generation failed"))
-        
-        # Convert HTML to PDF using Playwright
-        html_content = result["html_content"]
-        
-        # Create safe filename with timestamp
-        from datetime import datetime
-        from pathlib import Path
-        safe_drug = "".join(c if c.isalnum() or c in (' ', '-', '_') else '_' for c in drug_name)
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        filename = f"{safe_drug}_Intelligence_Report.pdf"
-        
-        # Create generated_reports directory if it doesn't exist (absolute path)
-        backend_dir = Path(__file__).resolve().parent.parent.parent.parent
-        reports_dir = backend_dir / "generated_reports"
-        reports_dir.mkdir(exist_ok=True)
-        
-        # Save to generated_reports folder
-        permanent_path = reports_dir / f"{safe_drug}_{timestamp}.pdf"
-        
-        # Convert to PDF
-        import asyncio
-        try:
-            loop = asyncio.get_event_loop()
-        except RuntimeError:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-        
-        if loop.is_running():
-            # If event loop is running, use thread
-            import concurrent.futures
-            with concurrent.futures.ThreadPoolExecutor() as executor:
-                future = executor.submit(
-                    asyncio.run,
-                    convert_html_to_pdf_async(html_content, str(permanent_path))
-                )
-                future.result()
-        else:
-            loop.run_until_complete(convert_html_to_pdf_async(html_content, str(permanent_path)))
-        
-        # Create temporary copy for FileResponse (gets cleaned up)
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_file:
-            tmp_path = tmp_file.name
-        
-        # Copy the permanent file to temp location for response
-        import shutil
-        shutil.copy2(permanent_path, tmp_path)
-        
-        print(f"📄 Report saved to: {permanent_path}")
-        
-        # Add background task to cleanup temporary file only
-        background_tasks.add_task(cleanup_temp_file, tmp_path)
-        
-        return FileResponse(
-            path=tmp_path,
-            filename=filename,
-            media_type="application/pdf"
-        )
-        
     except Exception as e:
         import traceback
         traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"Report generation failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
+    if result["status"] != "success":
+        raise HTTPException(status_code=500, detail=result)
 
-@router.get("/debug-report-data/{prompt_id}")
-def debug_report_data(prompt_id: str):
-    """
-    Debug endpoint to see stored report data for a specific prompt ID.
-    """
-    try:
-        # Get raw data
-        raw_data = report_data_manager.get_report_data(prompt_id)
-        
-        # Get formatted data
-        formatted_data = report_data_manager.get_formatted_agents_data(prompt_id)
-        
-        return {
-            "status": "success",
-            "prompt_id": prompt_id,
-            "raw_data": raw_data,
-            "formatted_data": formatted_data,
-            "data_availability": {
-                "iqvia": bool(formatted_data.get("iqvia")),
-                "clinical": bool(formatted_data.get("clinical")),
-                "patent": bool(formatted_data.get("patent")),
-                "exim": bool(formatted_data.get("exim")),
-                "internal_knowledge": bool(formatted_data.get("internal_knowledge")),
-                "web_intelligence": bool(formatted_data.get("web_intelligence"))
-            }
-        }
-    except Exception as e:
-        return {"status": "error", "message": str(e)}
-
-
-@router.get("/list-reports")
-def list_available_reports(session_id: str = None):
-    """
-    List all available reports with their metadata.
-    """
-    try:
-        reports = report_data_manager.list_reports(session_id=session_id)
-        return {
-            "status": "success",
-            "reports": reports,
-            "total_count": len(reports)
-        }
-    except Exception as e:
-        return {"status": "error", "message": str(e)}
-
-
-@router.get("/test-report-generation/{prompt_id}")
-def test_report_generation(prompt_id: str):
-    """
-    Test endpoint to check if report generation would work without actually generating.
-    """
-    try:
-        # Check cached data first
-        cached_data = report_data_manager.get_report_data(prompt_id)
-        if cached_data:
-            agents_data = report_data_manager.get_formatted_agents_data(prompt_id)
-            return {
-                "status": "success",
-                "data_source": "cached",
-                "prompt_id": prompt_id,
-                "drug_name": cached_data['drug_name'],
-                "indication": cached_data['indication'],
-                "agents_with_data": [k for k, v in agents_data.items() if v],
-                "ready_for_generation": True
-            }
-        
-        # Check MongoDB fallback
-        from app.core.db import init_db
-        db = init_db()
-        session = db.sessions.find_one(
-            {"agentsData.promptId": prompt_id}, 
-            {"agentsData.$": 1, "title": 1, "sessionId": 1}
-        )
-        
-        if not session:
-            return {
-                "status": "not_found",
-                "prompt_id": prompt_id,
-                "message": "Prompt ID not found in cache or database"
-            }
-            
-        return {
-            "status": "success", 
-            "data_source": "mongodb",
-            "prompt_id": prompt_id,
-            "session_has_sessionId": "sessionId" in session,
-            "session_keys": list(session.keys()),
-            "ready_for_generation": True
-        }
-        
-    except Exception as e:
-        return {
-            "status": "error",
-            "prompt_id": prompt_id,
-            "error": str(e)
-        }
+    return FileResponse(
+        path=result["file_path"],
+        filename=result["file_name"],
+        media_type="application/pdf",
+    )
 
 
 # ---------------- COMPARISON REPORT ---------------- #

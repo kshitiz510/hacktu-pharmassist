@@ -1,5 +1,2 @@
 .venv
 __pycache__/
-debug_reports/
-generated_reports/
-*.log

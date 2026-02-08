@@ -9,14 +9,10 @@ import {
   X,
   ChevronDown,
   Search,
-  MoreVertical,
+  MoreHorizontal,
   ChevronLeft,
   ChevronRight,
   Pill,
-  Bell,
-  BellOff,
-  Eye,
-  Radar,
 } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 
@@ -32,10 +28,6 @@ export function ChatSidebar({
   onDeleteChat,
   onRestoreChat,
   onRenameChat,
-  onToggleMonitoring,
-  onOpenNewsMonitor,
-  monitoredPromptIds = new Set(),
-  monitoredSessionIds = new Set(),
   isCollapsed = false,
   onToggleCollapse,
 }) {
@@ -216,8 +208,6 @@ export function ChatSidebar({
     const isEditing = chat.id === editingId;
     const isHovered = chat.id === hoveredId;
     const isMenuOpen = chat.id === menuOpenId;
-    // Check if this chat's session is monitored (persistent across all chats)
-    const isMonitored = monitoredSessionIds.has(chat.id);
 
     return (
       <motion.div
@@ -234,7 +224,7 @@ export function ChatSidebar({
         }}
       >
         {isEditing ? (
-          <div className="flex items-center gap-1.5 px-2 py-2 bg-card/70 rounded-2xl border border-primary/30">
+          <div className="flex items-center gap-1.5 px-2 py-2 bg-muted rounded-xl border border-primary/30">
             <input
               ref={editInputRef}
               type="text"
@@ -242,7 +232,7 @@ export function ChatSidebar({
               onChange={(e) => setEditTitle(e.target.value)}
               onKeyDown={handleKeyDown}
               onBlur={handleSaveEdit}
-              className="flex-1 bg-background text-foreground text-sm px-3 py-1.5 rounded-xl outline-none border border-border/70 focus:border-primary transition-colors"
+              className="flex-1 bg-background text-foreground text-sm px-3 py-1.5 rounded-lg outline-none border border-border focus:border-primary transition-colors"
             />
             <button
               onClick={handleSaveEdit}
@@ -260,27 +250,21 @@ export function ChatSidebar({
         ) : (
           <div
             onClick={() => onSelectChat(chat.id)}
-            className={`relative flex items-center gap-3 px-3 py-3 rounded-2xl cursor-pointer transition-all duration-200 ${
+            className={`relative flex items-center gap-3 px-3 py-3 rounded-xl cursor-pointer transition-all duration-200 ${
               isActive
-                ? "bg-primary/12 border border-primary/30 shadow-lg shadow-primary/10"
-                : "hover:bg-card/60 border border-transparent"
+                ? "bg-primary/10 border border-primary/25 shadow-lg shadow-primary/5"
+                : "hover:bg-muted border border-transparent"
             }`}
           >
             <div
-              className={`relative w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 border border-border/60 ${
-                isActive ? "bg-primary/15" : "bg-card/70"
+              className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${
+                isActive ? "bg-primary/20" : "bg-muted"
               }`}
             >
               <MessageSquare
                 size={14}
                 className={isActive ? "text-primary" : "text-muted-foreground"}
               />
-              {/* Monitored badge */}
-              {isMonitored && (
-                <span className="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full bg-amber-500/90 border border-card flex items-center justify-center" title="Monitored">
-                  <Eye size={8} className="text-white" />
-                </span>
-              )}
             </div>
             <div className="flex-1 min-w-0">
               <p
@@ -297,7 +281,7 @@ export function ChatSidebar({
               </p>
             </div>
 
-            {/* Three-dots menu button — replaces hover edit/delete */}
+            {/* Action buttons - show on hover */}
             <AnimatePresence>
               {(isHovered || isMenuOpen) && !isEditing && (
                 <motion.div
@@ -305,66 +289,28 @@ export function ChatSidebar({
                   animate={{ opacity: 1, scale: 1 }}
                   exit={{ opacity: 0, scale: 0.9 }}
                   transition={{ duration: 0.1 }}
-                  className="relative"
-                  ref={isMenuOpen ? menuRef : null}
+                  className="flex items-center gap-0.5 bg-background/90 rounded-lg p-0.5"
                 >
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
-                      setMenuOpenId(isMenuOpen ? null : chat.id);
+                      handleStartEdit(chat);
                     }}
-                    className="p-1.5 hover:bg-muted rounded-lg text-muted-foreground hover:text-foreground transition-colors"
-                    title="Actions"
+                    className="p-1.5 hover:bg-muted rounded text-muted-foreground hover:text-foreground transition-colors"
+                    title="Rename"
                   >
-                    <MoreVertical size={16} />
+                    <Edit2 size={14} />
                   </button>
-
-                  {/* Dropdown menu */}
-                  {isMenuOpen && (
-                    <div className="absolute right-0 top-8 z-50 w-48 py-1 bg-card border border-border rounded-xl shadow-xl animate-in fade-in slide-in-from-top-1 duration-100">
-                      {/* Enable Notifications toggle */}
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setMenuOpenId(null);
-                          if (onToggleMonitoring) {
-                            // Use the last promptId from agentsData if available, otherwise use session ID as placeholder
-                            const chatPromptIds = (chat.agentsData || []).map(e => e.promptId).filter(Boolean);
-                            const lastPromptId = chatPromptIds[chatPromptIds.length - 1];
-                            if (lastPromptId) {
-                              onToggleMonitoring(chat.sessionId || chat.id, lastPromptId, !isMonitored);
-                            }
-                          }
-                        }}
-                        className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-foreground/80 hover:bg-muted/60 hover:text-foreground transition-colors"
-                      >
-                        {isMonitored ? <BellOff size={14} className="text-amber-400" /> : <Bell size={14} />}
-                        {isMonitored ? "Disable Notifications" : "Enable Notifications"}
-                      </button>
-                      {/* Edit */}
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleStartEdit(chat);
-                        }}
-                        className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-foreground/80 hover:bg-muted/60 hover:text-foreground transition-colors"
-                      >
-                        <Edit2 size={14} />
-                        Edit
-                      </button>
-                      {/* Delete */}
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleDelete(chat.id);
-                        }}
-                        className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-destructive/80 hover:bg-destructive/10 hover:text-destructive transition-colors"
-                      >
-                        <Trash2 size={14} />
-                        Delete
-                      </button>
-                    </div>
-                  )}
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleDelete(chat.id);
+                    }}
+                    className="p-1.5 hover:bg-destructive/20 rounded text-muted-foreground hover:text-destructive transition-colors"
+                    title="Delete"
+                  >
+                    <Trash2 size={14} />
+                  </button>
                 </motion.div>
               )}
             </AnimatePresence>
@@ -394,9 +340,9 @@ export function ChatSidebar({
 
   return (
     <motion.div
-      animate={{ width: isCollapsed ? "76px" : "296px" }}
+      animate={{ width: isCollapsed ? "72px" : "288px" }}
       transition={{ duration: 0.3, ease: "easeInOut" }}
-      className="bg-card/85 border-r border-border/60 backdrop-blur-xl flex flex-col h-screen overflow-hidden"
+      className="bg-card border-r border-border flex flex-col h-screen overflow-hidden"
     >
       {isCollapsed ? (
         /* Collapsed Sidebar */
@@ -404,7 +350,7 @@ export function ChatSidebar({
           {/* Expand Button - Same position as collapse */}
           <button
             onClick={onToggleCollapse}
-            className="w-12 h-12 rounded-2xl border border-border/70 bg-card/60 hover:border-primary/40 flex items-center justify-center transition-colors"
+            className="w-12 h-12 rounded-xl bg-muted hover:bg-muted/80 flex items-center justify-center transition-colors"
             title="Expand Sidebar"
           >
             <ChevronRight size={20} className="text-muted-foreground" />
@@ -413,28 +359,36 @@ export function ChatSidebar({
           {/* Logo - Opens new chat */}
           <button
             onClick={onNewChat}
-            className="w-12 h-12 rounded-2xl border border-primary/40 bg-primary/15 flex items-center justify-center hover:scale-105 transition-transform duration-200"
+            className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-500 via-teal-500 to-emerald-500 flex items-center justify-center hover:scale-105 transition-transform duration-200"
             title="New Analysis"
           >
-            <Pill className="text-primary" size={22} />
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="white"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="w-6 h-6"
+            >
+              <circle cx="12" cy="12" r="1" />
+              <circle cx="19" cy="5" r="1" />
+              <circle cx="5" cy="19" r="1" />
+              <circle cx="19" cy="19" r="1" />
+              <line x1="12" y1="12" x2="19" y2="5" />
+              <line x1="12" y1="12" x2="5" y2="19" />
+              <line x1="12" y1="12" x2="19" y2="19" />
+            </svg>
           </button>
 
           {/* Search Button - Expands and focuses search */}
           <button
             onClick={handleSearchExpand}
-            className="w-12 h-12 rounded-2xl border border-border/70 bg-card/60 hover:border-primary/40 flex items-center justify-center transition-colors"
+            className="w-12 h-12 rounded-xl bg-muted hover:bg-muted/80 flex items-center justify-center transition-colors"
             title="Search Conversations"
           >
             <Search size={20} className="text-muted-foreground" />
-          </button>
-
-          {/* News Monitor icon */}
-          <button
-            onClick={onOpenNewsMonitor}
-            className="w-12 h-12 rounded-2xl border border-amber-500/40 bg-amber-500/10 hover:bg-amber-500/20 flex items-center justify-center transition-colors"
-            title="News Monitor"
-          >
-            <Radar size={20} className="text-amber-400" />
           </button>
         </div>
       ) : (
@@ -446,28 +400,45 @@ export function ChatSidebar({
           className="flex flex-col h-full overflow-hidden"
         >
           {/* Logo/Brand Header - Fixed at top */}
-          <div className="flex-shrink-0 p-4 border-b border-border/60">
+          <div className="flex-shrink-0 p-4 border-b border-border">
             <div className="flex items-center justify-between mb-4">
               <button
                 onClick={() => onSelectChat(null)}
                 className="flex items-center gap-3 hover:opacity-80 transition-opacity cursor-pointer group flex-1"
                 title="Home"
               >
-                <div className="w-11 h-11 rounded-2xl border border-primary/40 bg-primary/15 flex items-center justify-center group-hover:scale-105 transition-transform duration-200">
-                  <Pill className="text-primary" size={20} />
+                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 via-teal-500 to-emerald-500 flex items-center justify-center group-hover:scale-105 transition-transform duration-200">
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="white"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    className="w-5 h-5"
+                  >
+                    <circle cx="12" cy="12" r="1" />
+                    <circle cx="19" cy="5" r="1" />
+                    <circle cx="5" cy="19" r="1" />
+                    <circle cx="19" cy="19" r="1" />
+                    <line x1="12" y1="12" x2="19" y2="5" />
+                    <line x1="12" y1="12" x2="5" y2="19" />
+                    <line x1="12" y1="12" x2="19" y2="19" />
+                  </svg>
                 </div>
                 <div className="text-left">
-                  <div className="dossier-label">PharmAssist</div>
-                  <h1 className="text-lg font-display text-foreground group-hover:text-primary transition-colors">
-                    Portfolio Studio
+                  <h1 className="text-lg font-bold text-foreground group-hover:text-primary transition-colors">
+                    PharmAssist
                   </h1>
+                  <p className="text-xs text-muted-foreground">Drug Repurposing AI</p>
                 </div>
               </button>
 
               {/* Collapse Button */}
               <button
                 onClick={onToggleCollapse}
-                className="p-2 rounded-xl border border-border/60 hover:border-primary/40 transition-colors"
+                className="p-2 rounded-lg hover:bg-muted transition-colors"
                 title="Collapse Sidebar"
               >
                 <ChevronLeft size={18} className="text-muted-foreground" />
@@ -477,7 +448,7 @@ export function ChatSidebar({
               whileHover={{ scale: 1.02, y: -1 }}
               whileTap={{ scale: 0.98 }}
               onClick={onNewChat}
-              className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-2xl font-semibold text-primary-foreground transition-all duration-300 bg-primary hover:bg-primary/90 shadow-lg shadow-primary/25 hover:shadow-primary/40"
+              className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl font-semibold text-primary-foreground transition-all duration-300 bg-primary hover:bg-primary/90 shadow-lg shadow-primary/25 hover:shadow-primary/40"
             >
               <Plus size={18} />
               <span>New Analysis</span>
@@ -485,7 +456,7 @@ export function ChatSidebar({
           </div>
 
           {/* Search - Fixed at top */}
-          <div className="flex-shrink-0 px-4 py-3 border-b border-border/60">
+          <div className="flex-shrink-0 px-4 py-3 border-b border-border">
             <div className="relative">
               <Search
                 size={16}
@@ -497,7 +468,7 @@ export function ChatSidebar({
                 placeholder="Search conversations..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full bg-card/70 border border-border/60 rounded-2xl pl-10 pr-8 py-2.5 text-sm text-foreground placeholder:text-muted-foreground outline-none focus:border-primary/50 focus:bg-card transition-all duration-200"
+                className="w-full bg-background border border-border rounded-xl pl-10 pr-8 py-2.5 text-sm text-foreground placeholder:text-muted-foreground outline-none focus:border-primary/50 focus:bg-background transition-all duration-200"
               />
               {searchQuery && (
                 <button
@@ -577,14 +548,6 @@ export function ChatSidebar({
 
           {/* Footer - Fixed at bottom */}
           <div className="flex-shrink-0 p-4 border-t border-border bg-card">
-            {/* News Monitor link */}
-            <button
-              onClick={onOpenNewsMonitor}
-              className="w-full flex items-center gap-2.5 px-3 py-2 mb-2 rounded-xl text-sm text-amber-300/80 hover:bg-amber-500/10 hover:text-amber-300 border border-amber-500/20 transition-colors"
-            >
-              <Radar size={16} />
-              <span>News Monitor</span>
-            </button>
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>

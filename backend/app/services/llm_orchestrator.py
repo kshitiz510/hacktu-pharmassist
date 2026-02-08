@@ -11,10 +11,8 @@ from app.agents.patent_agent.patent_agent import run_patent_agent
 from app.agents.exim_agent.exim_agent import run_exim_agent
 from app.agents.internal_knowledge_agent.internal_knowledge_agent import run_internal_knowledge_agent
 from app.agents.web_intelligence_agent.web_intelligence_agent import run_web_intelligence_agent
-from app.agents.news_agent.news_agent import run_news_agent
 from app.core.db import DatabaseManager
 from app.services.parameter_extractor import extract_all_parameters
-from app.services.report_data_manager import ReportDataManager
 import datetime
 from app.core.config import MOCK_DATA_DIR
 import json
@@ -29,8 +27,6 @@ AGENT_MOCK_FILES = {
     "INTERNAL_KNOWLEDGE_AGENT": "internal_knowledge_data.json",
     "WEB_INTELLIGENCE_AGENT": "web_intel.json",
     "REPORT_GENERATOR": "report_data.json",
-    # NEWS_AGENT is optional — has no mock data, only runs on-demand
-    "NEWS_AGENT": None,
 }
 
 
@@ -284,10 +280,6 @@ def plan_and_run_session(
                     "data": load_agent_data("REPORT_GENERATOR"),
                     "visualizations": []
                 }
-            elif normalized_key in ["news", "newsagent", "news_agent"]:
-                # News Agent — optional, only runs when explicitly requested
-                print("[ORCHESTRATOR] News Agent is optional — skipping in normal flow")
-                continue
             else:
                 print(f"[ORCHESTRATOR] No handler for {agent_key}, loading mock data")
                 data = load_agent_data(agent_key)
@@ -334,55 +326,5 @@ def plan_and_run_session(
             },
         },
     )
-
-    # Store data in report data manager for download functionality
-    try:
-        report_manager = ReportDataManager()
-        
-        # Helper function to extract the actual data from the nested agent result structure
-        # Structure: agents_results[AGENT_KEY] = {timestamp, query, data: {status, data: {actual}, visualizations}}
-        def extract_actual_data(agent_result):
-            """Extract the innermost data from agent results."""
-            if not agent_result:
-                return {}
-            # First level: {timestamp, query, data}
-            outer_data = agent_result.get("data", {})
-            if not outer_data:
-                return {}
-            # Second level: {status, data, visualizations} - we want the inner 'data'
-            inner_data = outer_data.get("data", {})
-            if inner_data:
-                return inner_data
-            # Fallback: if no nested data, return outer data (minus status/visualizations)
-            return {k: v for k, v in outer_data.items() if k not in ["status", "visualizations"]}
-        
-        # Transform agents_results to the format expected by report_data_manager
-        # Keys need to be lowercase (iqvia, clinical, etc.) and we extract the ACTUAL inner data
-        formatted_agents_data = {
-            "iqvia": extract_actual_data(agents_results.get("IQVIA_AGENT")),
-            "clinical": extract_actual_data(agents_results.get("CLINICAL_AGENT")),
-            "patent": extract_actual_data(agents_results.get("PATENT_AGENT")),
-            "exim": extract_actual_data(agents_results.get("EXIM_AGENT")),
-            "internal_knowledge": extract_actual_data(agents_results.get("INTERNAL_KNOWLEDGE_AGENT")),
-            "web_intelligence": extract_actual_data(agents_results.get("WEB_INTELLIGENCE_AGENT")),
-        }
-        
-        # Debug: Log what data we're storing
-        for key, data in formatted_agents_data.items():
-            print(f"📊 {key}: {len(data)} fields" if data else f"❌ {key}: empty")
-        
-        report_manager.store_report_data(
-            session_id=session["sessionId"],
-            prompt_id=prompt_id,
-            drug_name=extracted_params.get("drug", "Unknown Drug"),
-            indication=extracted_params.get("indication", "Unknown Indication"),
-            agents_data=formatted_agents_data
-        )
-        print(f"✅ Stored report data for prompt_id: {prompt_id}")
-    except Exception as e:
-        import traceback
-        traceback.print_exc()
-        print(f"⚠️ Warning: Failed to store report data: {e}")
-        # Don't fail the orchestrator if report storage fails
 
     return "All agents have completed their tasks. Report generation is underway."

@@ -110,43 +110,10 @@ export const formatLabel = (key) => {
     }
   }
 
-  // Known concatenated phrases in pharmaceutical data (status fields, etc.)
-  const knownPhrases = {
-    activenotrecruiting: "Active, not recruiting",
-    notyetrecruiting: "Not yet recruiting",
-    enrollingbyinvitation: "Enrolling by invitation",
-    activelycompleted: "Actively completed",
-    temporarilynotavailable: "Temporarily not available",
-    notavailable: "Not available",
-    approvedformarketing: "Approved for marketing",
-    notyetapproved: "Not yet approved",
-    notyetactive: "Not yet active",
-    withheldunknown: "Withheld / unknown",
-    notapplicable: "Not applicable",
-  };
-
-  const lowerKey = String(key).toLowerCase().replace(/[\s_-]/g, "");
-  if (knownPhrases[lowerKey]) return knownPhrases[lowerKey];
-
-  let raw = String(key);
-
-  // If the string is ALL CAPS (or nearly), just title-case it instead of
-  // inserting a space before every letter.
-  const upperRatio = (raw.match(/[A-Z]/g) || []).length / raw.replace(/[^a-zA-Z]/g, "").length;
-  if (upperRatio > 0.6) {
-    // ALL-CAPS input like "COMPLETED" or "NOT_YET_RECRUITING"
-    raw = raw
-      .replace(/_/g, " ")
-      .toLowerCase()
-      .replace(/\b\w/g, (c) => c.toUpperCase()); // Title Case each word
-    // Return as-is (already nicely formatted)
-    return raw;
-  }
-
   // Convert snake_case and camelCase to Sentence case (only first word capitalized)
-  let formatted = raw
+  let formatted = String(key)
     .replace(/_/g, " ") // Replace underscores with spaces
-    .replace(/([A-Z])/g, " $1") // Add space before capital letters (camelCase)
+    .replace(/([A-Z])/g, " $1") // Add space before capital letters
     .trim();
 
   // Capitalize only the first letter, lowercase the rest
@@ -229,18 +196,20 @@ const VizCard = ({ title, description, icon: Icon, children, className = "" }) =
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.5, ease: [0.4, 0, 0.2, 1] }}
-      className={`bg-gradient-to-br from-card via-card/95 to-card/90 border border-white/[0.06] rounded-2xl p-6 shadow-xl hover:shadow-2xl hover:border-primary/20 transition-all duration-300 backdrop-blur-sm ${className}`}
+      className={`bg-gradient-to-br from-card via-card/95 to-card/90 border-2 border-border/30 rounded-2xl p-6 shadow-2xl hover:shadow-3xl hover:border-primary/20 transition-all duration-300 backdrop-blur-sm ${className}`}
     >
       {title && (
-        <div className="flex items-start justify-between mb-5 pb-4 border-b border-white/[0.06]">
+        <div className="flex items-start justify-between mb-5 pb-4 border-b-2 border-gradient-to-r from-primary/20 via-border/40 to-primary/20">
           <div className="flex-1">
-            <h3 className="text-lg font-bold text-foreground flex items-center gap-3 font-[family-name:var(--font-heading)] tracking-tight">
+            <h3 className="text-lg font-bold text-foreground flex items-center gap-3">
               {Icon && (
-                <div className="p-2.5 rounded-xl bg-gradient-to-br from-primary/15 via-primary/10 to-primary/5 border border-primary/20">
+                <div className="p-2.5 rounded-xl bg-gradient-to-br from-primary/20 via-primary/15 to-primary/10 border-2 border-primary/30 shadow-md">
                   <Icon size={20} className="text-primary" />
                 </div>
               )}
-              <span>{title}</span>
+              <span className="bg-gradient-to-r from-foreground to-foreground/90 bg-clip-text text-transparent">
+                {title}
+              </span>
             </h3>
             {safeDescription && (
               <p className="text-sm text-muted-foreground mt-2 leading-relaxed">{safeDescription}</p>
@@ -458,7 +427,7 @@ export const PieChartViz = ({ viz }) => {
     const dataValue = entry?.payload?.value || entry?.value || 0;
     const percent = total > 0 ? ((dataValue / total) * 100).toFixed(1) : "0.0";
     return (
-      <span className="text-sm text-foreground" style={{ letterSpacing: 'normal', wordSpacing: 'normal', textTransform: 'none' }}>
+      <span className="text-sm text-foreground">
         {formatLabel(value)} <span className="text-muted-foreground">({percent}%)</span>
       </span>
     );
@@ -511,12 +480,12 @@ export const PieChartViz = ({ viz }) => {
               height={100}
               iconType="circle"
               iconSize={12}
-              wrapperStyle={{ paddingTop: "20px", letterSpacing: "normal", textTransform: "none" }}
+              wrapperStyle={{ paddingTop: "20px" }}
               formatter={(value, entry) => {
                 const dataValue = entry?.payload?.value || 0;
                 const percent = total > 0 ? ((dataValue / total) * 100).toFixed(1) : "0.0";
                 return (
-                  <span className="text-sm font-medium text-foreground" style={{ letterSpacing: 'normal', wordSpacing: 'normal', textTransform: 'none' }}>
+                  <span className="text-sm font-medium text-foreground">
                     {formatLabel(value)} <span className="text-muted-foreground">({percent}%)</span>
                   </span>
                 );
@@ -689,16 +658,16 @@ export const MetricCardViz = ({ viz, index = 0 }) => {
   const { data = {}, title, description } = viz;
   const { value, delta, unit } = data;
 
-  // Teal + Deep Navy metric card accent colors
+  // Use brighter, more vibrant colors for metric cards
   const brightColors = [
-    { color: "#0ea5e9", light: "#38bdf8" }, // Sky
-    { color: "#14b8a6", light: "#2dd4bf" }, // Teal
-    { color: "#6366f1", light: "#818cf8" }, // Indigo
-    { color: "#f59e0b", light: "#fbbf24" }, // Amber
-    { color: "#10b981", light: "#34d399" }, // Emerald
-    { color: "#8b5cf6", light: "#a78bfa" }, // Violet
-    { color: "#06b6d4", light: "#22d3ee" }, // Cyan
-    { color: "#0e7490", light: "#0891b2" }, // Deep Teal
+    { color: "#3b82f6", light: "#60a5fa" }, // Bright Blue
+    { color: "#8b5cf6", light: "#a78bfa" }, // Bright Purple
+    { color: "#ec4899", light: "#f472b6" }, // Bright Pink
+    { color: "#f59e0b", light: "#fbbf24" }, // Bright Amber
+    { color: "#10b981", light: "#34d399" }, // Bright Emerald
+    { color: "#ef4444", light: "#f87171" }, // Bright Red
+    { color: "#06b6d4", light: "#22d3ee" }, // Bright Cyan
+    { color: "#f97316", light: "#fb923c" }, // Bright Orange
   ];
   const selectedColor = brightColors[index % brightColors.length];
 
@@ -931,7 +900,7 @@ export const DataTableViz = ({ viz }) => {
                   <th
                     key={col.key}
                     onClick={() => handleSort(col.key)}
-                    className="text-left p-4 text-foreground font-bold whitespace-nowrap cursor-pointer hover:bg-primary/15 transition-all select-none first:rounded-tl-xl last:rounded-tr-xl border-b border-primary/20 backdrop-blur-sm"
+                    className="text-left p-4 text-foreground font-bold whitespace-nowrap cursor-pointer hover:bg-primary/15 transition-all select-none first:rounded-tl-xl last:rounded-tr-xl border-b-2 border-primary/30 backdrop-blur-sm"
                   >
                     <span className="flex items-center gap-2">
                       {col.label}
@@ -1010,7 +979,7 @@ export const DataTableViz = ({ viz }) => {
         </div>
 
         {totalPages > 1 && (
-          <div className="flex items-center justify-between mt-6 pt-5 border-t border-border/30">
+          <div className="flex items-center justify-between mt-6 pt-5 border-t-2 border-border/50">
             <span className="text-sm font-medium text-muted-foreground">
               Showing {page * pageSize + 1}–{Math.min((page + 1) * pageSize, rows.length)} of{" "}
               <span className="text-foreground font-bold">{rows.length}</span>
@@ -1019,7 +988,7 @@ export const DataTableViz = ({ viz }) => {
               <button
                 onClick={() => setPage((p) => Math.max(0, p - 1))}
                 disabled={page === 0}
-                className="p-2.5 rounded-xl border border-border hover:bg-primary/10 hover:border-primary disabled:opacity-40 disabled:cursor-not-allowed transition-all duration-200 shadow-sm hover:shadow-md"
+                className="p-2.5 rounded-xl border-2 border-border hover:bg-primary/10 hover:border-primary disabled:opacity-40 disabled:cursor-not-allowed transition-all duration-200 shadow-sm hover:shadow-md"
               >
                 <ChevronLeft size={18} />
               </button>
@@ -1029,7 +998,7 @@ export const DataTableViz = ({ viz }) => {
               <button
                 onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
                 disabled={page >= totalPages - 1}
-                className="p-2.5 rounded-xl border border-border hover:bg-primary/10 hover:border-primary disabled:opacity-40 disabled:cursor-not-allowed transition-all duration-200 shadow-sm hover:shadow-md"
+                className="p-2.5 rounded-xl border-2 border-border hover:bg-primary/10 hover:border-primary disabled:opacity-40 disabled:cursor-not-allowed transition-all duration-200 shadow-sm hover:shadow-md"
               >
                 <ChevronRight size={18} />
               </button>
@@ -1052,10 +1021,10 @@ export const DataTableViz = ({ viz }) => {
             animate={{ scale: 1, opacity: 1 }}
             exit={{ scale: 0.9, opacity: 0 }}
             onClick={(e) => e.stopPropagation()}
-            className="bg-background rounded-2xl shadow-2xl max-w-7xl w-full max-h-[90vh] overflow-hidden border border-primary/20"
+            className="bg-background rounded-2xl shadow-2xl max-w-7xl w-full max-h-[90vh] overflow-hidden border-2 border-primary/30"
           >
             {/* Modal Header */}
-            <div className="bg-gradient-to-r from-primary/20 via-primary/10 to-primary/20 p-6 border-b border-primary/20 flex items-center justify-between">
+            <div className="bg-gradient-to-r from-primary/20 via-primary/10 to-primary/20 p-6 border-b-2 border-primary/30 flex items-center justify-between">
               <div>
                 <h3 className="text-2xl font-bold text-foreground flex items-center gap-3">
                   <TableIcon className="text-primary" size={28} />
@@ -1093,7 +1062,7 @@ export const DataTableViz = ({ viz }) => {
                       <th
                         key={col.key}
                         onClick={() => handleSort(col.key)}
-                        className="text-left p-4 text-foreground font-bold whitespace-nowrap cursor-pointer hover:bg-primary/20 transition-all border-b border-primary/20"
+                        className="text-left p-4 text-foreground font-bold whitespace-nowrap cursor-pointer hover:bg-primary/20 transition-all border-b-2 border-primary/40"
                       >
                         <span className="flex items-center gap-2">
                           {col.label}
@@ -1140,7 +1109,7 @@ export const DataTableViz = ({ viz }) => {
             </div>
 
             {/* Modal Footer */}
-            <div className="bg-gradient-to-r from-primary/10 via-primary/5 to-primary/10 p-4 border-t border-primary/20">
+            <div className="bg-gradient-to-r from-primary/10 via-primary/5 to-primary/10 p-4 border-t-2 border-primary/30">
               <p className="text-sm text-muted-foreground text-center">
                 Showing all <span className="font-bold text-foreground">{sortedRows.length}</span>{" "}
                 rows
@@ -1190,7 +1159,7 @@ const ImageViz = ({ viz }) => {
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      className="bg-gradient-to-br from-card via-card/95 to-card/90 border border-white/[0.06] rounded-2xl overflow-hidden shadow-xl hover:shadow-2xl hover:border-primary/20 transition-all duration-300"
+      className="bg-gradient-to-br from-card via-card/95 to-card/90 border-2 border-border/30 rounded-2xl overflow-hidden shadow-xl hover:shadow-2xl hover:border-primary/20 transition-all duration-300"
     >
       {/* Header */}
       <div className="p-4 border-b border-border/30">
@@ -1418,7 +1387,7 @@ const TextViz = ({ viz }) => {
 
   return (
     <VizCard title={title} description={!renderedContent ? description : undefined}>
-      <div className="bg-gradient-to-br from-muted/30 to-muted/15 rounded-xl p-6 border border-white/[0.04]">
+      <div className="bg-gradient-to-br from-muted/50 to-muted/30 rounded-xl p-6 border border-border/50">
         {/* If we have rendered content, show it. Otherwise show description here */}
         {renderedContent || (
           <div className="prose prose-sm max-w-none dark:prose-invert">
