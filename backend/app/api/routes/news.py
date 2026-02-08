@@ -60,9 +60,9 @@ async def enable_notification(
     user: dict = Depends(get_current_user),
 ):
     """Toggle monitoring for a specific promptId."""
-    session = db.get_session(request.sessionId)
+    session = db.get_session(request.sessionId, user_id=user["userId"])
     if not session:
-        raise HTTPException(404, "Session not found")
+        raise HTTPException(404, "Session not found or access denied")
 
     # Check promptId exists in agentsData
     found = False
@@ -131,9 +131,9 @@ async def recheck_notification(
     user: dict = Depends(get_current_user),
 ):
     """Trigger immediate recheck for a monitored promptId."""
-    session = db.get_session(request.sessionId)
+    session = db.get_session(request.sessionId, user_id=user["userId"])
     if not session:
-        raise HTTPException(404, "Session not found")
+        raise HTTPException(404, "Session not found or access denied")
 
     # Find original agent data for this promptId
     old_agent_data = None
@@ -252,25 +252,27 @@ async def list_all_monitored(
     db: DatabaseManager = Depends(get_db),
     user: dict = Depends(get_current_user),
 ):
-    """List ALL enabled monitored notifications across every session."""
+    """List ALL enabled monitored notifications across every session owned by the authenticated user."""
     notifications = list(db.db["notifications"].find({"enabled": True}))
 
-    # Batch-fetch unique sessions with lightweight projection (title + agentsData prompt info only)
+    # Batch-fetch unique sessions with user filtering
     session_ids = list({n.get("sessionId") for n in notifications if n.get("sessionId")})
     sessions_cache = {}
     for sid in session_ids:
-        sess = db.sessions.find_one(
-            {"sessionId": sid},
-            {"title": 1, "agentsData.promptId": 1, "agentsData.prompt": 1, "sessionId": 1},
-        )
+        # Only fetch sessions owned by the current user
+        sess = db.get_session(sid, user_id=user["userId"])
         if sess:
             sessions_cache[sid] = sess
 
     result = []
     for n in notifications:
-        n.pop("_id", None)
         sid = n.get("sessionId", "")
-        session = sessions_cache.get(sid, {})
+        # Skip notifications for sessions not owned by this user
+        session = sessions_cache.get(sid)
+        if not session:
+            continue
+        
+        n.pop("_id", None)
 
         # Resolve prompt text from agentsData
         pid = n.get("promptId", "")
@@ -302,10 +304,12 @@ async def list_monitored(
     notifications = list(db.db["notifications"].find(query))
 
     # Serialize and enrich with chat title
-    session = db.get_session(sessionId)
+    session = db.get_session(sessionId, user_id=user["userId"])
+    if not session:
+        raise HTTPException(404, "Session not found or access denied")
+    
     prompts_map = {}
-    if session:
-        for entry in session.get("agentsData", []):
+    for entry in session.get("agentsData", []):
             pid = entry.get("promptId")
             if pid:
                 prompts_map[pid] = {
@@ -342,6 +346,13 @@ async def get_notification_details(
     notif = db.db["notifications"].find_one({"notificationId": notification_id})
     if not notif:
         raise HTTPException(404, "Notification not found")
+
+    # Verify the session belongs to the user
+    session_id = notif.get("sessionId")
+    if session_id:
+        session = db.get_session(session_id, user_id=user["userId"])
+        if not session:
+            raise HTTPException(404, "Notification not found or access denied")
 
     notif.pop("_id", None)
     return {
@@ -440,9 +451,11 @@ async def broadcast_intel(
 
         session = sessions_cache.get(sid)
         if session is None:
-            session = db.get_session(sid)
+            # Verify session belongs to user before processing
+            session = db.get_session(sid, user_id=user["userId"])
             sessions_cache[sid] = session
         if not session:
+            # Skip sessions not owned by this user
             continue
 
         # Find original agent data for this promptId
@@ -558,6 +571,7 @@ async def broadcast_intel(
 async def acknowledge_all_notifications(
     request: AcknowledgeRequest,
     db: DatabaseManager = Depends(get_db),
+    user: dict = Depends(get_current_user),
 ):
     """
     Mark notifications as acknowledged (resets affectedByIntel flag).
@@ -565,13 +579,19 @@ async def acknowledge_all_notifications(
     This is used when the user clicks the refresh button to indicate they've
     reviewed all current intel notifications. Notifications turn green (secure status).
     
-    If sessionIds is provided, only acknowledges those sessions.
-    If sessionIds is None, acknowledges ALL enabled notifications.
+    If sessionIds is provided, only acknowledges those sessions (that belong to the user).
+    If sessionIds is None, acknowledges ALL enabled notifications for the user's sessions.
     """
-    query = {"enabled": True}
+    # Get all user's session IDs to ensure we only acknowledge their notifications
+    user_sessions = db.list_sessions(user_id=user["userId"], limit=10000)
+    user_session_ids = [s["sessionId"] for s in user_sessions]
+    
+    query = {"enabled": True, "sessionId": {"$in": user_session_ids}}
     
     if request.sessionIds:
-        query["sessionId"] = {"$in": request.sessionIds}
+        # Further filter to only the requested sessions (intersection with user's sessions)
+        filtered_session_ids = [sid for sid in request.sessionIds if sid in user_session_ids]
+        query["sessionId"] = {"$in": filtered_session_ids}
     
     result = db.db["notifications"].update_many(
         query,

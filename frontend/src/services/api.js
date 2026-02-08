@@ -15,7 +15,7 @@ export function setTokenGetter(fn) {
 
 /**
  * Wrapper around `fetch` that automatically attaches a Bearer token
- * (if authenticated) and handles 401 redirects.
+ * (if authenticated) and retries on 401 if the token wasn't ready yet.
  */
 async function authFetch(url, options = {}) {
   const headers = { ...(options.headers || {}) };
@@ -24,23 +24,43 @@ async function authFetch(url, options = {}) {
   if (_tokenGetter) {
     try {
       const token = await _tokenGetter();
+      console.log("[authFetch] Token obtained:", token ? `${token.substring(0, 20)}...` : "NULL");
       if (token) {
         headers["Authorization"] = `Bearer ${token}`;
       }
-    } catch {
-      // Token retrieval failed — allow the request to proceed without auth
-      // (backend will return 401 if the route requires it)
+      // If token is null, the Clerk session might still be loading.
+      // Send the request anyway – if auth is required, the backend will
+      // return 401 and we'll retry once after a short delay.
+    } catch (e) {
+      // Token retrieval failed – proceed without auth header
+      console.warn("[authFetch] Failed to get token:", e);
     }
   }
 
-  const response = await fetch(url, { ...options, headers });
+  let response = await fetch(url, { ...options, headers });
 
-  // If the backend responds with 401, redirect to sign-in
-  if (response.status === 401) {
-    // Only redirect if we're not already on the sign-in page
-    if (!window.location.pathname.startsWith("/sign-in")) {
-      window.location.href = "/sign-in";
+  // If we got 401 and have a token getter, retry once after waiting for token
+  if (response.status === 401 && _tokenGetter && !options._isRetry) {
+    console.log("[authFetch] Got 401, retrying after waiting for token...");
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    
+    try {
+      const token = await _tokenGetter();
+      if (token) {
+        headers["Authorization"] = `Bearer ${token}`;
+        response = await fetch(url, { 
+          ...options, 
+          headers, 
+          _isRetry: true 
+        });
+      }
+    } catch (e) {
+      console.warn("[authFetch] Retry failed:", e);
     }
+  }
+
+  // Surface 401s as errors after retry
+  if (response.status === 401) {
     throw new Error("Authentication required");
   }
 
@@ -364,7 +384,7 @@ export const api = {
   },
 
   async acknowledgeAllNotifications(sessionIds = null) {
-    const response = await fetch(`${API_BASE_URL}/news/acknowledge-all`, {
+    const response = await authFetch(`${API_BASE_URL}/news/acknowledge-all`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ sessionIds }),

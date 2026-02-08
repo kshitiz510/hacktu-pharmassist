@@ -129,6 +129,14 @@ Return JSON:"""
                 if data.get(key) in [None, 'null', 'None', '']:
                     data[key] = None
             
+            # Ensure drug/disease are strings, not lists (LLM can return lists)
+            for key in ['drug', 'disease']:
+                val = data.get(key)
+                if isinstance(val, list):
+                    data[key] = val[0] if val else None
+                elif val is not None and not isinstance(val, str):
+                    data[key] = str(val)
+            
             return data
     except Exception as e:
         logger.warning(f"LLM extraction failed (using fallback parser): {e}")
@@ -218,10 +226,20 @@ def _load_disease_synonyms() -> Dict[str, list]:
         return {}
 
 
-def _resolve_synonym(term: str, synonyms: Dict[str, list]) -> str:
+def _resolve_synonym(term, synonyms: Dict[str, list]) -> str:
     """Resolve term to canonical name using synonyms."""
     if not term:
         return term
+    
+    # Handle list inputs (LLM may return a list instead of a string)
+    if isinstance(term, list):
+        term = term[0] if term else None
+        if not term:
+            return None
+    
+    # Ensure term is a string
+    if not isinstance(term, str):
+        term = str(term)
     
     term_lower = term.lower()
     

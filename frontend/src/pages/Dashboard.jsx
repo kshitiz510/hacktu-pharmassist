@@ -505,8 +505,10 @@ export default function GeminiDashboard() {
   }, []);
 
   useEffect(() => {
-    refreshAllMonitored();
-  }, [refreshAllMonitored]);
+    if (isSignedIn) {
+      refreshAllMonitored();
+    }
+  }, [isSignedIn, refreshAllMonitored]);
 
   // Handle suggested prompt clicks from agent displays
   const handleSuggestedPromptClick = (promptText) => {
@@ -773,86 +775,62 @@ export default function GeminiDashboard() {
 
     console.log(`[renderAgentDataDisplay] ${agent.key} visualizations:`, visualizations);
 
-    // Get the summary banner for this agent - show even if running for initial visibility
-    const summaryBanner = getAgentSummary(agent.key, agentResponse);
-
-    // If agent provides visualizations in standardized format, render them generically
-    // But for web intelligence and IQVIA, prefer legacy renderer even with empty viz array to show content
-    const hasVisualizationsWithContent =
-      Array.isArray(visualizations) &&
-      visualizations.length > 0 &&
-      visualizations.some((v) => v.vizType && v.data);
-
-    // Use viz system only if we have meaningful visualizations AND it's not a case where legacy shows more content
-    const shouldUseVizSystem =
-      hasVisualizationsWithContent && !["web", "iqvia"].includes(agent.key); // Prefer legacy for these as they have richer displays
-
-    if (shouldUseVizSystem) {
-      return (
-        <AgentErrorBoundary agentName={agent.name}>
-          {summaryBanner}
-          <VizList visualizations={visualizations} agentName={agent.name} />
-        </AgentErrorBoundary>
-      );
-    }
-
     // Extract actual data (could be nested)
     const data = agentResponse.data || agentResponse;
     console.log(`[renderAgentDataDisplay] ${agent.key} fallback data:`, data);
 
-    // Get the summary banner for this agent (for legacy renderers) - show even if running
-    const summaryBanner2 = getAgentSummary(agent.key, data);
+    // All agents use their dedicated AgentDisplayShell-wrapped components.
+    // VizList is appended below when the agent also has standardised visualizations.
+    const hasViz = Array.isArray(visualizations) && visualizations.length > 0;
 
-    // Fallback to legacy per-agent renderers - wrapped in error boundaries
     switch (agent.key) {
-      case "iqvia":
+      case "iqvia": {
+        // Filter out chart types already rendered inline by IQVIADataDisplay
+        const iqviaTableViz = Array.isArray(visualizations)
+          ? visualizations.filter((v) => ["table", "actions"].includes(v.vizType))
+          : [];
+        const hasTableViz = iqviaTableViz.length > 0;
         return (
           <AgentErrorBoundary agentName="IQVIA">
-            {summaryBanner2}
-            <IQVIADataDisplay data={data} isFirstPrompt={true} />
-            {/* Also show any visualizations that exist */}
-            {visualizations.length > 0 && (
+            <IQVIADataDisplay data={data} isFirstPrompt={true} onPromptClick={handleSuggestedPromptClick} />
+            {hasTableViz && (
               <div className="mt-4">
-                <VizList visualizations={visualizations} agentName="IQVIA" />
+                <VizList visualizations={iqviaTableViz} agentName="IQVIA" />
               </div>
             )}
           </AgentErrorBoundary>
         );
+      }
       case "exim":
         return (
           <AgentErrorBoundary agentName="EXIM Trade">
-            {summaryBanner2}
-            <EXIMDataDisplay data={data} showChart={true} />
+            <EXIMDataDisplay data={data} showChart={true} onPromptClick={handleSuggestedPromptClick} />
           </AgentErrorBoundary>
         );
       case "patent":
         return (
           <AgentErrorBoundary agentName="Patent">
-            {summaryBanner2}
-            <PatentDataDisplay data={data} isFirstPrompt={true} />
+            <PatentDataDisplay data={data} isFirstPrompt={true} onPromptClick={handleSuggestedPromptClick} />
           </AgentErrorBoundary>
         );
-      case "clinical":
+      case "clinical": {
         return (
           <AgentErrorBoundary agentName="Clinical Trials">
-            {summaryBanner2}
-            <ClinicalDataDisplay data={data} isFirstPrompt={true} />
+            <ClinicalDataDisplay data={data} isFirstPrompt={true} onPromptClick={handleSuggestedPromptClick} />
           </AgentErrorBoundary>
         );
+      }
       case "internal":
         return (
           <AgentErrorBoundary agentName="Internal Knowledge">
-            {summaryBanner2}
-            <InternalKnowledgeDisplay data={data} />
+            <InternalKnowledgeDisplay data={data} onPromptClick={handleSuggestedPromptClick} />
           </AgentErrorBoundary>
         );
       case "web":
         return (
           <AgentErrorBoundary agentName="Web Intelligence">
-            {summaryBanner2}
-            <WebIntelDisplay data={data} />
-            {/* Also show any visualizations that exist */}
-            {visualizations.length > 0 && (
+            <WebIntelDisplay data={data} onPromptClick={handleSuggestedPromptClick} />
+            {hasViz && (
               <div className="mt-4">
                 <VizList visualizations={visualizations} agentName="Web Intelligence" />
               </div>

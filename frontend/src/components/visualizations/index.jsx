@@ -243,7 +243,30 @@ const VizCard = ({ title, description, icon: Icon, children, className = "" }) =
               <span>{title}</span>
             </h3>
             {safeDescription && (
-              <p className="text-sm text-muted-foreground mt-2 leading-relaxed">{safeDescription}</p>
+              <div className="text-sm text-muted-foreground mt-2 leading-relaxed space-y-1.5">
+                {safeDescription.split("\n").map((line, idx) => {
+                  const trimmed = line.trim();
+                  if (!trimmed) return null;
+                  const numberedMatch = trimmed.match(/^(\d+)[\.\)]\s+(.*)/);
+                  if (numberedMatch) {
+                    return (
+                      <div key={idx} className="flex items-start gap-2">
+                        <span className="text-primary font-semibold min-w-[1.25rem] text-right">{numberedMatch[1]}.</span>
+                        <span>{numberedMatch[2]}</span>
+                      </div>
+                    );
+                  }
+                  if (trimmed.startsWith("•") || trimmed.startsWith("-")) {
+                    return (
+                      <div key={idx} className="flex items-start gap-2">
+                        <span className="text-primary">•</span>
+                        <span>{trimmed.replace(/^[•\-]\s*/, "")}</span>
+                      </div>
+                    );
+                  }
+                  return <p key={idx}>{trimmed}</p>;
+                })}
+              </div>
             )}
           </div>
         </div>
@@ -1301,8 +1324,9 @@ const TextViz = ({ viz }) => {
       // Split by double newline for paragraphs, or single newline for bullet points
       const lines = content.split("\n");
       const hasBullets = lines.some(line => line.trim().startsWith("•") || line.trim().startsWith("-"));
+      const hasNumbered = lines.some(line => /^\d+[\.\)]\s/.test(line.trim()));
       
-      if (hasBullets) {
+      if (hasBullets || hasNumbered) {
         return (
           <div className="space-y-2">
             {lines.map((line, idx) => {
@@ -1316,6 +1340,17 @@ const TextViz = ({ viz }) => {
                   <div key={idx} className="flex items-start gap-2">
                     <span className="text-primary mt-1">•</span>
                     <span className="text-foreground/90 leading-relaxed">{bulletText}</span>
+                  </div>
+                );
+              }
+
+              // Handle numbered items (e.g., "1. ...", "2) ...")
+              const numberedMatch = trimmed.match(/^(\d+)[\.\)]\s+(.*)/);
+              if (numberedMatch) {
+                return (
+                  <div key={idx} className="flex items-start gap-3">
+                    <span className="text-primary font-semibold min-w-[1.5rem] text-right">{numberedMatch[1]}.</span>
+                    <span className="text-foreground/90 leading-relaxed">{numberedMatch[2]}</span>
                   </div>
                 );
               }
@@ -1432,6 +1467,17 @@ const TextViz = ({ viz }) => {
                   <div key={idx} className="flex items-start gap-2 mb-2">
                     <span className="text-primary mt-0.5">•</span>
                     <span className="text-foreground/90 leading-relaxed">{bulletText}</span>
+                  </div>
+                );
+              }
+
+              // Handle numbered items (e.g., "1. ...", "2) ...")
+              const numberedMatch = trimmed.match(/^(\d+)[\.\)]\s+(.*)/);
+              if (numberedMatch) {
+                return (
+                  <div key={idx} className="flex items-start gap-3 mb-2">
+                    <span className="text-primary font-semibold min-w-[1.5rem] text-right">{numberedMatch[1]}.</span>
+                    <span className="text-foreground/90 leading-relaxed">{numberedMatch[2]}</span>
                   </div>
                 );
               }

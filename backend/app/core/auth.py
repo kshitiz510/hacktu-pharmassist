@@ -107,6 +107,11 @@ async def get_current_user(
             ...
     """
     auth_header = request.headers.get("Authorization")
+    print(f"[AUTH DEBUG] Path: {request.url.path}")
+    print(f"[AUTH DEBUG] Auth header present: {bool(auth_header)}")
+    if auth_header:
+        print(f"[AUTH DEBUG] Auth header starts with Bearer: {auth_header.startswith('Bearer ')}")
+        print(f"[AUTH DEBUG] Token length: {len(auth_header.split(' ', 1)[1]) if ' ' in auth_header else 'N/A'}")
     if not auth_header or not auth_header.startswith("Bearer "):
         raise HTTPException(
             status_code=401,

@@ -114,12 +114,12 @@ export function MetricCard({
       {/* Label */}
       <div className="flex items-start justify-between gap-2">
         <p
-          className={`text-muted-foreground font-medium ${compact ? "text-[10px]" : "text-xs"} uppercase tracking-wider leading-tight`}
+          className={`text-muted-foreground font-medium ${compact ? "text-xs" : "text-[13px]"} uppercase tracking-wider leading-tight`}
         >
           {label}
         </p>
         {Icon && (
-          <Icon className={`${theme.accent} flex-shrink-0 opacity-60`} size={compact ? 14 : 16} />
+          <Icon className={`${theme.accent} flex-shrink-0 opacity-60`} size={compact ? 16 : 18} />
         )}
       </div>
 
@@ -127,13 +127,13 @@ export function MetricCard({
       <div className="flex items-end justify-between gap-2 mt-auto">
         <div className="flex items-baseline gap-1.5 min-w-0">
           <span
-            className={`font-bold ${theme.accent} ${compact ? "text-xl" : "text-2xl"} truncate leading-none`}
+            className={`font-bold ${theme.accent} ${compact ? "text-2xl" : "text-3xl"} truncate leading-none`}
           >
             {value ?? "—"}
           </span>
           {unit && (
             <span
-              className={`text-muted-foreground ${compact ? "text-[10px]" : "text-xs"} font-medium`}
+              className={`text-muted-foreground ${compact ? "text-xs" : "text-sm"} font-medium`}
             >
               {unit}
             </span>
@@ -181,13 +181,13 @@ export function DataTable({ headers = [], rows = [], color = "blue", compact = f
       animate={{ opacity: 1 }}
       className={`rounded-2xl border ${theme.border} overflow-hidden backdrop-blur-sm`}
     >
-      <table className="w-full text-sm">
+      <table className="w-full text-[15px]">
         <thead className="bg-muted/50">
           <tr>
             {headers.map((header, idx) => (
               <th
                 key={idx}
-                className={`text-left ${compact ? "px-2 py-1.5" : "px-3 py-2"} text-foreground font-semibold text-xs uppercase tracking-wider`}
+                className={`text-left ${compact ? "px-3 py-2" : "px-4 py-2.5"} text-foreground font-semibold text-[13px] uppercase tracking-wider`}
               >
                 {header}
               </th>
@@ -203,7 +203,7 @@ export function DataTable({ headers = [], rows = [], color = "blue", compact = f
               {row.map((cell, cellIdx) => (
                 <td
                   key={cellIdx}
-                  className={`${compact ? "px-2 py-1.5" : "px-3 py-2"} text-muted-foreground`}
+                  className={`${compact ? "px-3 py-2" : "px-4 py-2.5"} text-muted-foreground`}
                 >
                   {cell}
                 </td>
@@ -230,23 +230,40 @@ export function InfoCard({ title, content, items = [], color = "blue", icon: Ico
       className={`
         rounded-2xl border ${theme.border} ${theme.bg}
         bg-gradient-to-br ${theme.gradient}
-        p-4 space-y-2 backdrop-blur-sm
+        p-5 space-y-3 backdrop-blur-sm
       `}
     >
       {title && (
-        <div className="flex items-center gap-2">
-          {Icon && <Icon className={theme.accent} size={16} />}
-          <h4 className="font-semibold text-foreground text-sm">{title}</h4>
+        <div className="flex items-center gap-2.5">
+          {Icon && <Icon className={theme.accent} size={18} />}
+          <h4 className="font-semibold text-foreground text-base">{title}</h4>
         </div>
       )}
 
-      {content && <p className="text-muted-foreground text-sm leading-relaxed">{content}</p>}
+      {content && (
+        <div className="text-muted-foreground text-[15px] leading-relaxed space-y-1.5">
+          {content.split("\n").map((line, idx) => {
+            const trimmed = line.trim();
+            if (!trimmed) return null;
+            const numberedMatch = trimmed.match(/^(\d+)[\.\)]\s+(.*)/);
+            if (numberedMatch) {
+              return (
+                <div key={idx} className="flex items-start gap-2">
+                  <span className={`${theme.accent} font-semibold min-w-[1.25rem] text-right`}>{numberedMatch[1]}.</span>
+                  <span>{numberedMatch[2]}</span>
+                </div>
+              );
+            }
+            return <p key={idx}>{trimmed}</p>;
+          })}
+        </div>
+      )}
 
       {items.length > 0 && (
-        <ul className="space-y-1.5">
+        <ul className="space-y-2">
           {items.map((item, idx) => (
-            <li key={idx} className="flex items-start gap-2 text-sm text-muted-foreground">
-              <span className={`${theme.accent} mt-1`}>•</span>
+            <li key={idx} className="flex items-start gap-2.5 text-[15px] text-muted-foreground">
+              <span className={`${theme.accent} mt-1.5`}>•</span>
               <span>{item}</span>
             </li>
           ))}
@@ -257,17 +274,18 @@ export function InfoCard({ title, content, items = [], color = "blue", icon: Ico
 }
 
 /**
- * SectionHeader - Section title with optional badge
+ * SectionHeader - Section title with optional badge and accent line
  */
 export function SectionHeader({ title, badge, color = "blue" }) {
   const theme = colorThemes[color] || colorThemes.blue;
 
   return (
-    <div className="flex items-center gap-2 mb-3">
-      <h3 className={`font-semibold ${theme.accent} text-base tracking-tight font-[family-name:var(--font-heading)]`}>{title}</h3>
+    <div className="flex items-center gap-2.5 mb-3">
+      <div className={`w-1 h-5 rounded-full opacity-60 ${theme.accent.replace('text-', 'bg-')}`} />
+      <h3 className={`font-semibold ${theme.accent} text-sm uppercase tracking-wider font-[family-name:var(--font-heading)]`}>{title}</h3>
       {badge && (
         <span
-          className={`text-xs px-2 py-0.5 rounded-full ${theme.bg} ${theme.accent} font-medium`}
+          className={`text-xs px-2.5 py-0.5 rounded-full ${theme.bg} ${theme.accent} font-semibold`}
         >
           {badge}
         </span>
@@ -279,10 +297,8 @@ export function SectionHeader({ title, badge, color = "blue" }) {
 /**
  * SummaryBanner - Canonical summary banner for all agents
  * 
- * Displays:
- * - Researcher question
- * - Yes/No/Risky answer badge
- * - 3 explainer bullet points
+ * Displays researcher question, answer badge, and explainer chips.
+ * Designed as a subtle "key finding" strip at the top of each agent section.
  */
 export function SummaryBanner({ summary, color = "blue", delay = 0 }) {
   if (!summary || !summary.researcherQuestion) {
@@ -291,18 +307,15 @@ export function SummaryBanner({ summary, color = "blue", delay = 0 }) {
 
   const theme = colorThemes[color] || colorThemes.blue;
   
-  // Safely convert question to string
   const questionText = typeof summary.researcherQuestion === 'string'
     ? summary.researcherQuestion
     : (summary.researcherQuestion?.text || String(summary.researcherQuestion));
   
-  // Determine badge styling based on answer
   const rawAnswer = summary.answer || "Unknown";
   const answer = typeof rawAnswer === 'string' ? rawAnswer : (rawAnswer?.text || String(rawAnswer));
   const answerLower = answer.toLowerCase();
   
   let badgeStyle = "";
-  
   if (answerLower === "yes" || answerLower === "positive" || answerLower === "clear") {
     badgeStyle = "bg-emerald-500/20 text-emerald-400 border-emerald-500/30";
   } else if (answerLower === "no" || answerLower === "blocked" || answerLower === "caution") {
@@ -317,22 +330,20 @@ export function SummaryBanner({ summary, color = "blue", delay = 0 }) {
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 10 }}
+      initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: delay * 0.05, duration: 0.3 }}
+      transition={{ delay: delay * 0.05, duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
       className={`
-        relative overflow-hidden rounded-2xl border ${theme.border} ${theme.bg}
-        p-4 mb-4
-        bg-gradient-to-br ${theme.gradient}
-        backdrop-blur-sm
+        relative overflow-hidden rounded-xl border ${theme.border}
+        p-4 bg-gradient-to-r ${theme.gradient} backdrop-blur-sm
       `}
     >
       {/* Question and Answer Row */}
-      <div className="flex items-center justify-between mb-3">
-        <p className="text-sm text-muted-foreground font-medium">
+      <div className="flex items-start justify-between gap-3 mb-3">
+        <p className="text-[15px] text-foreground/80 font-medium leading-snug flex-1">
           {questionText}
         </p>
-        <span className={`text-xs font-bold px-3 py-1 rounded-full border ${badgeStyle}`}>
+        <span className={`text-xs font-bold px-3.5 py-1.5 rounded-full border whitespace-nowrap ${badgeStyle}`}>
           {answer}
         </span>
       </div>
@@ -341,7 +352,6 @@ export function SummaryBanner({ summary, color = "blue", delay = 0 }) {
       {explainers.length > 0 && (
         <div className="flex flex-wrap gap-2">
           {explainers.slice(0, 3).map((explainer, idx) => {
-            // Ensure explainer is a string
             const explainerText = typeof explainer === 'string' 
               ? explainer 
               : (explainer && typeof explainer === 'object' 
@@ -351,7 +361,7 @@ export function SummaryBanner({ summary, color = "blue", delay = 0 }) {
             return (
               <span
                 key={idx}
-                className={`text-xs px-2 py-1 rounded-md ${theme.bg} text-muted-foreground border ${theme.border}`}
+                className="text-[13px] px-3 py-1.5 rounded-lg bg-white/[0.04] text-muted-foreground border border-white/[0.06]"
               >
                 {explainerText}
               </span>
@@ -374,22 +384,27 @@ export function SuggestedPrompts({ prompts, onPromptClick, color = "blue" }) {
   const theme = colorThemes[color] || colorThemes.blue;
 
   return (
-    <div className="mt-4 pt-4 border-t border-white/[0.04]">
-      <p className="text-xs text-muted-foreground mb-2">Suggested follow-ups:</p>
+    <div className="mt-6 pt-5 border-t border-white/[0.04]">
+      <p className="text-xs text-muted-foreground mb-3 uppercase tracking-wider font-semibold">Suggested follow-ups</p>
       <div className="flex flex-wrap gap-2">
-        {prompts.slice(0, 2).map((item, idx) => (
-          <button
+        {prompts.slice(0, 3).map((item, idx) => (
+          <motion.button
             key={idx}
+            initial={{ opacity: 0, y: 4 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: idx * 0.05 }}
+            whileHover={{ scale: 1.02, y: -1 }}
+            whileTap={{ scale: 0.98 }}
             onClick={() => onPromptClick?.(item.prompt)}
             className={`
-              text-xs px-3 py-1.5 rounded-lg
-              ${theme.bg} ${theme.accent} border ${theme.border}
-              hover:bg-opacity-80 transition-all duration-200
-              cursor-pointer
+              text-sm px-4 py-2.5 rounded-xl
+              bg-white/[0.04] text-muted-foreground border border-white/[0.08]
+              hover:bg-white/[0.07] hover:text-foreground hover:border-white/[0.12]
+              transition-all duration-200 cursor-pointer
             `}
           >
             {item.prompt}
-          </button>
+          </motion.button>
         ))}
       </div>
     </div>

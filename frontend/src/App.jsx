@@ -12,12 +12,23 @@ import "./App.css";
  * Sets a token getter so every API call automatically includes the JWT.
  */
 function AuthTokenBridge() {
-  const { getToken } = useAuth();
+  const { getToken, isSignedIn } = useAuth();
 
   useEffect(() => {
+    console.log("[AuthTokenBridge] Setting token getter, isSignedIn:", isSignedIn);
+    
+    // Quick test: try getting a token right now
+    if (isSignedIn) {
+      getToken().then(t => {
+        console.log("[AuthTokenBridge] Test getToken result:", t ? `${t.substring(0, 20)}...` : "NULL");
+      }).catch(e => {
+        console.error("[AuthTokenBridge] Test getToken error:", e);
+      });
+    }
+    
     setTokenGetter(() => getToken());
     return () => setTokenGetter(null);
-  }, [getToken]);
+  }, [getToken, isSignedIn]);
 
   return null;
 }
@@ -26,7 +37,11 @@ function App() {
   return (
     <Router>
       <AuthTokenBridge />
+      <AuthTokenBridge />
       <Routes>
+        <Route path="/sign-in/*" element={<SignInPage />} />
+        <Route path="/sign-up/*" element={<SignUpPage />} />
+        <Route path="/*" element={<Dasboard />} />
         <Route path="/sign-in/*" element={<SignInPage />} />
         <Route path="/sign-up/*" element={<SignUpPage />} />
         <Route path="/*" element={<Dasboard />} />
