@@ -21,6 +21,7 @@ from app.api.schemas import (
     VoiceMode,
 )
 from app.core.db import DatabaseManager, get_db
+from app.core.auth import get_current_user
 from app.agents.voice_assistant_agent import (
     VoiceAssistantAgent,
     VoiceAgentAction,
@@ -122,7 +123,8 @@ def update_session(db: DatabaseManager, session: dict):
 @router.post("/process-text", response_model=VoiceAgentResponseModel)
 async def process_voice_text(
     request: VoiceTextRequest,
-    db: DatabaseManager = Depends(get_db)
+    db: DatabaseManager = Depends(get_db),
+    user: dict = Depends(get_current_user),
 ):
     """
     Process transcribed voice text input.
@@ -172,7 +174,8 @@ async def process_voice_text(
 @router.post("/process-audio", response_model=VoiceAgentResponseModel)
 async def process_voice_audio(
     request: VoiceAudioRequest,
-    db: DatabaseManager = Depends(get_db)
+    db: DatabaseManager = Depends(get_db),
+    user: dict = Depends(get_current_user),
 ):
     """
     Process raw voice audio input.
@@ -234,7 +237,8 @@ async def process_voice_audio(
 @router.post("/interrupt", response_model=VoiceAgentResponseModel)
 async def handle_interrupt(
     request: VoiceInterruptRequest,
-    db: DatabaseManager = Depends(get_db)
+    db: DatabaseManager = Depends(get_db),
+    user: dict = Depends(get_current_user),
 ):
     """
     Handle voice interruption during agent speech.
@@ -329,7 +333,8 @@ async def handle_interrupt(
 @router.post("/confirm", response_model=VoiceAgentResponseModel)
 async def handle_confirmation(
     request: VoiceConfirmRequest,
-    db: DatabaseManager = Depends(get_db)
+    db: DatabaseManager = Depends(get_db),
+    user: dict = Depends(get_current_user),
 ):
     """
     Handle user confirmation or rejection of refined prompt.
@@ -405,7 +410,8 @@ async def handle_confirmation(
 @router.get("/state/{session_id}", response_model=VoiceAgentResponseModel)
 async def get_voice_state(
     session_id: str,
-    db: DatabaseManager = Depends(get_db)
+    db: DatabaseManager = Depends(get_db),
+    user: dict = Depends(get_current_user),
 ):
     """
     Get current voice state for a session.
@@ -435,7 +441,8 @@ async def get_voice_state(
 @router.post("/reset", response_model=VoiceAgentResponseModel)
 async def reset_voice_state(
     request: VoiceResetRequest,
-    db: DatabaseManager = Depends(get_db)
+    db: DatabaseManager = Depends(get_db),
+    user: dict = Depends(get_current_user),
 ):
     """
     Reset voice state for a session.
@@ -474,7 +481,8 @@ async def reset_voice_state(
 async def mark_speaking_started(
     sessionId: str,
     response_text: str,
-    db: DatabaseManager = Depends(get_db)
+    db: DatabaseManager = Depends(get_db),
+    user: dict = Depends(get_current_user),
 ):
     """
     Mark that the agent has started speaking.
@@ -496,7 +504,8 @@ async def mark_speaking_started(
 @router.post("/speaking-ended")
 async def mark_speaking_ended(
     sessionId: str,
-    db: DatabaseManager = Depends(get_db)
+    db: DatabaseManager = Depends(get_db),
+    user: dict = Depends(get_current_user),
 ):
     """
     Mark that the agent has finished speaking.

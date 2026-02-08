@@ -58,10 +58,12 @@ In ALL incomplete cases, return type="vague".
 
 
 You are in an iterative planning conversation.
-You will receive full chat history.
+You will receive full chat history AND a context note showing previous analysis context.
 
 Rules:
 - ACCUMULATE information from the ENTIRE chat history. If drug was mentioned earlier and disease is mentioned now, you have BOTH.
+- Use the context note (if provided) to understand what was analyzed previously.
+- If a follow-up prompt only adds to the context (e.g., adds indication when drug is already known), GENERATE THE PLAN immediately.
 - If information is missing or unclear, ask clarification questions.
 - Do NOT repeat questions already answered in chat history.
 - Only return type="plan" when all required details are clear.
@@ -101,7 +103,7 @@ When asking clarifying questions, be CONCISE and ACTIONABLE:
 - Don't ask redundant questions that overlap
 
 Example good clarification:
-"I can help analyze metformin. To create a focused plan:\\n\\n1. What indication? (Type 2 Diabetes / PCOS / Weight management / Other)\\n2. Analysis type? (Market size / Clinical trials / Patent landscape / Full assessment)\\n\\nOr say 'Start Research' for a comprehensive full assessment."
+"With metformin and diabetes, I can start outlining your analysis. To create a focused plan:\\n\\n1. Would you like to explore market trends, clinical pipeline, patent landscape, or a full assessment for metformin in diabetes?\\n\\nOr say 'Start Research' to proceed with a comprehensive assessment of metformin in diabetes."
 
 Example bad clarification (too many questions):
 "1. What drug?\\n2. What disease?\\n3. What geography?\\n4. What timeframe?\\n5. What competitors?\\n6. What analysis type?"
@@ -130,6 +132,13 @@ def plan_tasks(session: dict):
     messages = [
         {"role": "system", "content": PLANNING_SYSTEM_PROMPT}
     ]
+
+    # Include context note if available (from previous analyses)
+    if session.get("_context_note"):
+        messages.append({
+            "role": "system",
+            "content": f"📋 {session['_context_note']}\n\nUse this context when the user provides follow-up information."
+        })
 
     for turn in session.get("chatHistory", []):
         messages.append({
@@ -174,7 +183,69 @@ def plan_tasks(session: dict):
 
             return result
         
-        # If type is "vague" or any other type, return the result as-is
+        # If type is "vague", check if we can infer drug + indication from context and chat history
+        if result.get("type") == "vague":
+            # Try to extract drug and indication from the session context note
+            extracted_drug = None
+            extracted_indication = None
+            
+            context_note = session.get("_context_note", "")
+            
+            # Parse context note to get previous drug
+            if "Drug(s):" in context_note:
+                drug_part = context_note.split("Drug(s):")[1].split(",")[0].strip()
+                if drug_part and drug_part != "None":
+                    extracted_drug = [drug_part]
+            
+            # Parse context note to get previous indication
+            if "Indication(s):" in context_note:
+                indication_part = context_note.split("Indication(s):")[1].strip()
+                if indication_part and indication_part != "None":
+                    extracted_indication = [indication_part]
+            
+            # Also try to extract from latest user messages
+            chat_history = session.get("chatHistory", [])
+            if not extracted_indication and chat_history:
+                last_user_msg = None
+                for msg in reversed(chat_history):
+                    if msg.get("role") == "user":
+                        last_user_msg = msg.get("content", "").lower()
+                        break
+                
+                # Common disease keywords
+                diseases = {
+                    "diabetes": ["diabetes"],
+                    "cancer": ["cancer"],
+                    "heart": ["cardiovascular", "cardiac", "heart disease"],
+                    "neurodegenerat": ["neurodegenerative"],
+                    "covid": ["covid", "coronavirus"],
+                    "hiv": ["hiv", "aids"],
+                }
+                
+                if last_user_msg:
+                    for disease_key, disease_names in diseases.items():
+                        for disease_name in disease_names:
+                            if disease_name in last_user_msg:
+                                extracted_indication = [disease_key.capitalize()]
+                                break
+                        if extracted_indication:
+                            break
+            
+            # If we have both drug and indication, generate plan
+            if extracted_drug and extracted_indication:
+                print(f"[CONTEXT RECOVERY] Inferred drug={extracted_drug}, indication={extracted_indication}")
+                return {
+                    "type": "plan",
+                    "agents": ["iqvia", "exim", "patent", "clinical", "internal", "web", "report"],
+                    "drug": extracted_drug,
+                    "indication": extracted_indication,
+                    "consolidated_prompt": f"Analyze {extracted_drug[0]} for {extracted_indication[0]} treatment. Provide comprehensive analysis covering market trends, clinical pipeline, patent landscape, web sentiment, and trade data."
+                }
+            
+            # Otherwise return the vague response from LLM
+            return result
+
+        # If type is any other type, return the result as-is
         return result
 
     except Exception as e:

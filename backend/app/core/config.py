@@ -49,6 +49,9 @@ CORS_ORIGINS = [
     "http://127.0.0.1:5173",
 ]
 
+# Clerk authentication
+CLERK_PUBLISHABLE_KEY = os.getenv("CLERK_PUBLISHABLE_KEY", "")
+
 # Mongo configuration
 MONGO_URI = os.getenv("MONGO_URI", "mongodb://localhost:27017")
 MONGO_DB_NAME = os.getenv("MONGO_DB_NAME", "pharmassist_db")

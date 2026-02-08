@@ -3,15 +3,26 @@ import { api } from "../services/api";
 
 const MAX_CHATS = 50;
 
-export function useChatManager() {
+/**
+ * @param {{ enabled?: boolean }} options
+ *   Pass `enabled: false` to skip loading sessions (e.g. user not signed in).
+ */
+export function useChatManager({ enabled = true } = {}) {
   const [chats, setChats] = useState([]);
   const [activeChatId, setActiveChatId] = useState(null);
   const [isLoaded, setIsLoaded] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
-    loadChatsFromDB();
-  }, []);
+    if (enabled) {
+      loadChatsFromDB();
+    } else {
+      // Not authenticated – reset to empty
+      setChats([]);
+      setActiveChatId(null);
+      setIsLoaded(true);
+    }
+  }, [enabled]);
 
   const loadChatsFromDB = async () => {
     try {

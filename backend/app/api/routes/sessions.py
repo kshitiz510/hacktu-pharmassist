@@ -1,7 +1,8 @@
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Query
 
 from app.api.schemas import SessionCreateRequest
 from app.core.db import DatabaseManager, get_db
+from app.core.auth import get_current_user
 from app.agents.internal_knowledge_agent.internal_knowledge_agent import (
     store_document_for_session,
     get_document_for_session,
@@ -14,33 +15,46 @@ router = APIRouter(prefix="/sessions", tags=["sessions"])
 
 @router.post("/create")
 async def create_session(
-    request: SessionCreateRequest, db: DatabaseManager = Depends(get_db)
+    request: SessionCreateRequest,
+    db: DatabaseManager = Depends(get_db),
+    user: dict = Depends(get_current_user),
 ):
-    session_id = db.create_session(title=request.title)
+    session_id = db.create_session(title=request.title, user_id=user["userId"])
     return {"status": "success", "sessionId": session_id, "title": request.title}
 
 
 @router.get("")
 async def list_sessions(
-    limit: int = 50, skip: int = 0, db: DatabaseManager = Depends(get_db)
+    limit: int = 50,
+    skip: int = 0,
+    db: DatabaseManager = Depends(get_db),
+    user: dict = Depends(get_current_user),
 ):
-    sessions = db.list_sessions()[skip : skip + limit]
+    sessions = db.list_sessions(skip=skip, limit=limit, user_id=user["userId"])
     return {"status": "success", "sessions": sessions}
 
 
 @router.get("/{session_id}")
-async def get_session(session_id: str, db: DatabaseManager = Depends(get_db)):
-    session = db.get_session(session_id)
+async def get_session(
+    session_id: str,
+    db: DatabaseManager = Depends(get_db),
+    user: dict = Depends(get_current_user),
+):
+    session = db.get_session(session_id, user_id=user["userId"])
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
     return {"status": "success", "session": session}
 
 
 @router.delete("/{session_id}/delete")
-async def delete_session(session_id: str, db: DatabaseManager = Depends(get_db)):
+async def delete_session(
+    session_id: str,
+    db: DatabaseManager = Depends(get_db),
+    user: dict = Depends(get_current_user),
+):
     # Clear any uploaded document for this session
     clear_document_for_session(session_id)
-    ok = db.delete_session(session_id)
+    ok = db.delete_session(session_id, user_id=user["userId"])
     if not ok:
         raise HTTPException(status_code=404, detail="Session not found")
     return {"status": "success"}
@@ -50,15 +64,17 @@ async def delete_session(session_id: str, db: DatabaseManager = Depends(get_db))
 async def upload_document(
     session_id: str,
     file: UploadFile = File(...),
-    db: DatabaseManager = Depends(get_db)
+    tagForMonitoring: str = Query(default="", description="promptId to trigger news comparator after upload"),
+    db: DatabaseManager = Depends(get_db),
+    user: dict = Depends(get_current_user),
 ):
     """
     Upload a document for internal knowledge analysis.
     Supports: PDF, PPTX, XLSX, DOCX, TXT, CSV
     Document is stored for the current session only.
     """
-    # Verify session exists
-    session = db.get_session(session_id)
+    # Verify session exists and belongs to user
+    session = db.get_session(session_id, user_id=user["userId"])
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
     
@@ -83,6 +99,28 @@ async def upload_document(
         
         # Store document for session
         store_document_for_session(session_id, filename, parsed_content, file_type)
+
+        # ── Optional: trigger news comparator for a monitored promptId ──
+        monitoring_result = None
+        if tagForMonitoring:
+            try:
+                from app.agents.news_agent.news_agent import run_news_agent
+                # Find existing agent data for the tagged promptId
+                old_agent_data = None
+                for entry in session.get("agentsData", []):
+                    if entry.get("promptId") == tagForMonitoring:
+                        old_agent_data = entry.get("agents", {})
+                        break
+                if old_agent_data:
+                    monitoring_result = run_news_agent(
+                        session_id=session_id,
+                        prompt_id=tagForMonitoring,
+                        old_agent_data=old_agent_data,
+                        new_document_text=parsed_content,
+                        db=db,
+                    )
+            except Exception:
+                import traceback; traceback.print_exc()
         
         return {
             "status": "success",
@@ -90,15 +128,20 @@ async def upload_document(
             "filename": filename,
             "file_type": file_type,
             "content_length": len(parsed_content),
+            "monitoringResult": monitoring_result,
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to process file: {str(e)}")
 
 
 @router.get("/{session_id}/document")
-async def get_document_info(session_id: str, db: DatabaseManager = Depends(get_db)):
+async def get_document_info(
+    session_id: str,
+    db: DatabaseManager = Depends(get_db),
+    user: dict = Depends(get_current_user),
+):
     """Get information about the uploaded document for a session."""
-    session = db.get_session(session_id)
+    session = db.get_session(session_id, user_id=user["userId"])
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
     
@@ -119,9 +162,13 @@ async def get_document_info(session_id: str, db: DatabaseManager = Depends(get_d
 
 
 @router.delete("/{session_id}/document")
-async def delete_document(session_id: str, db: DatabaseManager = Depends(get_db)):
+async def delete_document(
+    session_id: str,
+    db: DatabaseManager = Depends(get_db),
+    user: dict = Depends(get_current_user),
+):
     """Remove the uploaded document for a session."""
-    session = db.get_session(session_id)
+    session = db.get_session(session_id, user_id=user["userId"])
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
     

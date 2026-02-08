@@ -145,8 +145,8 @@ export function IQVIADataDisplay({ data, isFirstPrompt, onPromptClick }) {
                 <svg className="w-full h-[calc(100%-2rem)]" viewBox="0 0 400 180" preserveAspectRatio="none">
                   <defs>
                     <linearGradient id="iqviaLineGradient" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#3b82f6" stopOpacity="0.3" />
-                      <stop offset="100%" stopColor="#3b82f6" stopOpacity="0.02" />
+                      <stop offset="0%" stopColor="#38bdf8" stopOpacity="0.3" />
+                      <stop offset="100%" stopColor="#38bdf8" stopOpacity="0.02" />
                     </linearGradient>
                   </defs>
                   
@@ -166,11 +166,11 @@ export function IQVIADataDisplay({ data, isFirstPrompt, onPromptClick }) {
                     return (
                       <>
                         <path d={`M 0,180 L ${points.join(' L ')} L 400,180 Z`} fill="url(#iqviaLineGradient)" />
-                        <path d={`M ${points.join(' L ')}`} fill="none" stroke="#3b82f6" strokeWidth="3" strokeLinecap="round" />
+                        <path d={`M ${points.join(' L ')}`} fill="none" stroke="#38bdf8" strokeWidth="3" strokeLinecap="round" />
                         {marketForecast.data.map((d, i) => {
                           const x = (i / (marketForecast.data.length - 1)) * 400;
                           const y = 180 - ((d.value || 0) / maxVal) * 160;
-                          return <circle key={i} cx={x} cy={y} r="5" fill="#3b82f6" stroke="white" strokeWidth="2" />;
+                          return <circle key={i} cx={x} cy={y} r="5" fill="#38bdf8" stroke="white" strokeWidth="2" />;
                         })}
                       </>
                     );
@@ -182,7 +182,7 @@ export function IQVIADataDisplay({ data, isFirstPrompt, onPromptClick }) {
                   {marketForecast.data.map((d, i) => (
                     <div key={i} className="text-center">
                       <div className="font-medium text-foreground">{d.year}</div>
-                      <div className="text-blue-400 font-semibold">${d.value}B</div>
+                      <div className="text-sky-400 font-semibold">${d.value}B</div>
                     </div>
                   ))}
                 </div>
@@ -215,7 +215,7 @@ export function IQVIADataDisplay({ data, isFirstPrompt, onPromptClick }) {
                   <svg viewBox="0 0 100 100" className="w-full h-full -rotate-90">
                     {(() => {
                       let currentAngle = 0;
-                      const colors = ['#3b82f6', '#10b981', '#8b5cf6', '#f59e0b', '#ec4899'];
+                      const colors = ['#38bdf8', '#2dd4bf', '#a78bfa', '#fbbf24', '#818cf8'];
                       return competitiveShare.data.map((item, idx) => {
                         const share = parseShareValue(item.share);
                         const angle = (share / 100) * 360;
@@ -245,8 +245,8 @@ export function IQVIADataDisplay({ data, isFirstPrompt, onPromptClick }) {
               {/* Legend */}
               <div className="space-y-2">
                 {competitiveShare.data.map((item, idx) => {
-                  const colors = ['bg-blue-500', 'bg-emerald-500', 'bg-violet-500', 'bg-amber-500', 'bg-pink-500'];
-                  const textColors = ['text-blue-400', 'text-emerald-400', 'text-violet-400', 'text-amber-400', 'text-pink-400'];
+                  const colors = ['bg-sky-400', 'bg-teal-400', 'bg-violet-400', 'bg-amber-400', 'bg-indigo-400'];
+                  const textColors = ['text-sky-400', 'text-teal-400', 'text-violet-400', 'text-amber-400', 'text-indigo-400'];
                   return (
                     <div key={idx} className="flex items-center justify-between p-2.5 bg-muted/30 rounded-lg">
                       <div className="flex items-center gap-2">
@@ -639,7 +639,7 @@ export function ClinicalDataDisplay({ data, isFirstPrompt, onPromptClick }) {
               <span
                 key="count"
                 className={
-                  idx === 0 ? "text-blue-400" : idx === 1 ? "text-emerald-400" : "text-amber-400"
+                idx === 0 ? "text-sky-400" : idx === 1 ? "text-emerald-400" : "text-amber-400"
                 }
               >
                 ~{item.trial_count}
@@ -683,7 +683,7 @@ export function ClinicalDataDisplay({ data, isFirstPrompt, onPromptClick }) {
 
 export function InternalKnowledgeDisplay({ data, onPromptClick }) {
   if (!data || Object.keys(data).length === 0) {
-    return <FallbackDisplay agentName="Internal Knowledge" icon={BookOpen} color="pink" />;
+    return <FallbackDisplay agentName="Internal Knowledge" icon={BookOpen} color="cyan" />;
   }
 
   const pastResearch = data.past_research;
@@ -698,13 +698,13 @@ export function InternalKnowledgeDisplay({ data, onPromptClick }) {
     <div className="space-y-4">
       {/* Summary Banner */}
       {bannerSummary && bannerSummary.researcherQuestion && (
-        <SummaryBanner summary={bannerSummary} color="pink" />
+        <SummaryBanner summary={bannerSummary} color="cyan" />
       )}
 
       {/* Past Research */}
       {pastResearch && (
         <div>
-          <SectionHeader title={pastResearch.title || "Past Research"} color="pink" />
+          <SectionHeader title={pastResearch.title || "Past Research"} color="cyan" />
           {pastResearch.studies && (
             <div className="space-y-3">
               {pastResearch.studies.map((study, idx) => (
@@ -714,7 +714,7 @@ export function InternalKnowledgeDisplay({ data, onPromptClick }) {
                   title={study.title}
                   content={study.summary || study.findings}
                   items={study.key_findings || []}
-                  color="pink"
+                  color="cyan"
                   delay={idx}
                 />
               ))}
@@ -726,14 +726,14 @@ export function InternalKnowledgeDisplay({ data, onPromptClick }) {
       {/* Company Memory */}
       {companyMemory && (
         <div>
-          <SectionHeader title={companyMemory.title || "Company Knowledge"} color="pink" />
+          <SectionHeader title={companyMemory.title || "Company Knowledge"} color="cyan" />
           <div className="grid grid-cols-2 gap-3">
             {companyMemory.items?.map((item, idx) => (
               <MetricCard
                 key={idx}
                 label={item.label}
                 value={item.value}
-                color="pink"
+                color="cyan"
                 delay={idx}
               />
             ))}
@@ -747,7 +747,7 @@ export function InternalKnowledgeDisplay({ data, onPromptClick }) {
           <SectionHeader
             title="Related Documents"
             badge={`${documents.length} found`}
-            color="pink"
+            color="cyan"
           />
           <div className="space-y-2">
             {documents.slice(0, 5).map((doc, idx) => (
@@ -756,9 +756,9 @@ export function InternalKnowledgeDisplay({ data, onPromptClick }) {
                 initial={{ opacity: 0, x: -10 }}
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ delay: idx * 0.05 }}
-                className="flex items-center gap-3 p-3 rounded-lg bg-pink-500/5 border border-pink-500/20"
+                className="flex items-center gap-3 p-3 rounded-lg bg-cyan-500/5 border border-cyan-500/20"
               >
-                <FileText className="text-pink-400 flex-shrink-0" size={16} />
+                <FileText className="text-cyan-400 flex-shrink-0" size={16} />
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-foreground truncate">{doc.title}</p>
                   <p className="text-xs text-muted-foreground">{doc.date || doc.type}</p>
@@ -771,7 +771,7 @@ export function InternalKnowledgeDisplay({ data, onPromptClick }) {
 
       {/* Suggested Next Prompts */}
       {suggestedNextPrompts && (
-        <SuggestedPrompts prompts={suggestedNextPrompts} onPromptClick={onPromptClick} color="pink" />
+        <SuggestedPrompts prompts={suggestedNextPrompts} onPromptClick={onPromptClick} color="cyan" />
       )}
     </div>
   );
@@ -783,7 +783,7 @@ export function InternalKnowledgeDisplay({ data, onPromptClick }) {
 
 export function WebIntelDisplay({ data, onPromptClick }) {
   if (!data || Object.keys(data).length === 0) {
-    return <FallbackDisplay agentName="Web Intelligence" icon={Globe} color="cyan" />;
+    return <FallbackDisplay agentName="Web Intelligence" icon={Globe} color="indigo" />;
   }
 
   // Data can be at top level or nested in .data
@@ -814,13 +814,13 @@ export function WebIntelDisplay({ data, onPromptClick }) {
     <div className="space-y-4">
       {/* Summary Banner */}
       {bannerSummary && bannerSummary.researcherQuestion && (
-        <SummaryBanner summary={bannerSummary} color="cyan" />
+        <SummaryBanner summary={bannerSummary} color="indigo" />
       )}
 
       {/* Sentiment Summary */}
       {sentimentSummary && (
         <div>
-          <SectionHeader title="Sentiment Analysis" color="cyan" />
+          <SectionHeader title="Sentiment Analysis" color="indigo" />
           <div className="grid grid-cols-3 gap-3">
             <MetricCard
               label="Positive"
@@ -853,7 +853,7 @@ export function WebIntelDisplay({ data, onPromptClick }) {
           <SectionHeader
             title="Recent News"
             badge={`${newsArticles.length} articles`}
-            color="cyan"
+            color="indigo"
           />
           <div className="space-y-2">
             {newsArticles.slice(0, 4).map((article, idx) => (
@@ -862,12 +862,12 @@ export function WebIntelDisplay({ data, onPromptClick }) {
                 initial={{ opacity: 0, y: 5 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: idx * 0.05 }}
-                className="p-3 rounded-lg bg-cyan-500/5 border border-cyan-500/20 hover:border-cyan-500/40 transition-colors"
+                className="p-3 rounded-lg bg-indigo-500/5 border border-indigo-500/20 hover:border-indigo-500/40 transition-colors"
               >
                 <p className="text-sm font-medium text-foreground line-clamp-1">{article.title}</p>
                 <div className="flex items-center gap-2 mt-1.5 text-xs text-muted-foreground">
                   {article.source && (
-                    <span className="text-cyan-400 font-medium">{article.source}</span>
+                    <span className="text-indigo-400 font-medium">{article.source}</span>
                   )}
                   {article.publishedAt && (
                     <>
@@ -939,8 +939,8 @@ export function WebIntelDisplay({ data, onPromptClick }) {
       
       {/* Fallback message if no content */}
       {!hasContent && !bannerSummary && (
-        <div className="p-4 rounded-lg bg-cyan-500/5 border border-cyan-500/20 text-center">
-          <Globe className="w-8 h-8 text-cyan-400 mx-auto mb-2" />
+        <div className="p-4 rounded-lg bg-indigo-500/5 border border-indigo-500/20 text-center">
+          <Globe className="w-8 h-8 text-indigo-400 mx-auto mb-2" />
           <p className="text-sm text-muted-foreground">Web intelligence analysis complete. No specific articles or discussions found for this query.</p>
         </div>
       )}
@@ -1000,12 +1000,13 @@ function ConfidenceBadge({ level }) {
 
 function FallbackDisplay({ agentName, icon: Icon = Shield, color = "blue" }) {
   const colorStyles = {
-    blue: "text-blue-400 bg-blue-500/10 border-blue-500/20",
+    blue: "text-sky-400 bg-sky-500/10 border-sky-500/20",
     teal: "text-teal-400 bg-teal-500/10 border-teal-500/20",
     amber: "text-amber-400 bg-amber-500/10 border-amber-500/20",
     emerald: "text-emerald-400 bg-emerald-500/10 border-emerald-500/20",
-    pink: "text-pink-400 bg-pink-500/10 border-pink-500/20",
+    pink: "text-cyan-400 bg-cyan-500/10 border-cyan-500/20",
     cyan: "text-cyan-400 bg-cyan-500/10 border-cyan-500/20",
+    indigo: "text-indigo-400 bg-indigo-500/10 border-indigo-500/20",
   };
 
   return (

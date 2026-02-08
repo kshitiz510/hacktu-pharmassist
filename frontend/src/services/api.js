@@ -1,10 +1,57 @@
 const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
+// ---------------------------------------------------------------------------
+// Auth token injection – set by the React <AuthTokenBridge /> in App.jsx
+// ---------------------------------------------------------------------------
+let _tokenGetter = null;
+
+/**
+ * Register a function that returns a Promise<string|null> with the Clerk
+ * session token.  Called once from App.jsx via `useAuth().getToken`.
+ */
+export function setTokenGetter(fn) {
+  _tokenGetter = fn;
+}
+
+/**
+ * Wrapper around `fetch` that automatically attaches a Bearer token
+ * (if authenticated) and handles 401 redirects.
+ */
+async function authFetch(url, options = {}) {
+  const headers = { ...(options.headers || {}) };
+
+  // Attach auth token when available
+  if (_tokenGetter) {
+    try {
+      const token = await _tokenGetter();
+      if (token) {
+        headers["Authorization"] = `Bearer ${token}`;
+      }
+    } catch {
+      // Token retrieval failed — allow the request to proceed without auth
+      // (backend will return 401 if the route requires it)
+    }
+  }
+
+  const response = await fetch(url, { ...options, headers });
+
+  // If the backend responds with 401, redirect to sign-in
+  if (response.status === 401) {
+    // Only redirect if we're not already on the sign-in page
+    if (!window.location.pathname.startsWith("/sign-in")) {
+      window.location.href = "/sign-in";
+    }
+    throw new Error("Authentication required");
+  }
+
+  return response;
+}
+
 export const api = {
   async analyze(sessionId, prompt) {
     if (!sessionId) throw new Error("Session ID is required");
 
-    const response = await fetch(`${API_BASE_URL}/analyze`, {
+    const response = await authFetch(`${API_BASE_URL}/analyze`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -18,7 +65,7 @@ export const api = {
   },
 
   async createSession(title) {
-    const response = await fetch(`${API_BASE_URL}/sessions/create`, {
+    const response = await authFetch(`${API_BASE_URL}/sessions/create`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ title }),
@@ -30,19 +77,19 @@ export const api = {
 
   async listSessions(limit = 50, skip = 0) {
     const params = new URLSearchParams({ limit, skip });
-    const response = await fetch(`${API_BASE_URL}/sessions?${params}`);
+    const response = await authFetch(`${API_BASE_URL}/sessions?${params}`);
     if (!response.ok) throw new Error("Failed to list sessions");
     return response.json();
   },
 
   async getSession(sessionId) {
-    const response = await fetch(`${API_BASE_URL}/sessions/${sessionId}`);
+    const response = await authFetch(`${API_BASE_URL}/sessions/${sessionId}`);
     if (!response.ok) throw new Error("Failed to get session");
     return response.json();
   },
 
   async deleteSession(sessionId) {
-    const response = await fetch(`${API_BASE_URL}/sessions/${sessionId}/delete`, {
+    const response = await authFetch(`${API_BASE_URL}/sessions/${sessionId}/delete`, {
       method: "DELETE",
     });
     if (!response.ok) throw new Error("Failed to delete session");
@@ -50,7 +97,7 @@ export const api = {
   },
 
   async generateReport(promptId) {
-    const response = await fetch(`${API_BASE_URL}/generate-report/${promptId}`, {
+    const response = await authFetch(`${API_BASE_URL}/generate-report/${promptId}`, {
       method: "GET",
     });
     if (!response.ok) throw new Error("Failed to generate report");
@@ -64,7 +111,7 @@ export const api = {
     const formData = new FormData();
     formData.append("file", file);
 
-    const response = await fetch(`${API_BASE_URL}/sessions/${sessionId}/upload-document`, {
+    const response = await authFetch(`${API_BASE_URL}/sessions/${sessionId}/upload-document`, {
       method: "POST",
       body: formData,
     });
@@ -77,13 +124,13 @@ export const api = {
   },
 
   async getDocumentInfo(sessionId) {
-    const response = await fetch(`${API_BASE_URL}/sessions/${sessionId}/document`);
+    const response = await authFetch(`${API_BASE_URL}/sessions/${sessionId}/document`);
     if (!response.ok) throw new Error("Failed to get document info");
     return response.json();
   },
 
   async deleteDocument(sessionId) {
-    const response = await fetch(`${API_BASE_URL}/sessions/${sessionId}/document`, {
+    const response = await authFetch(`${API_BASE_URL}/sessions/${sessionId}/document`, {
       method: "DELETE",
     });
     if (!response.ok) throw new Error("Failed to delete document");
@@ -98,7 +145,7 @@ export const api = {
   async voiceProcessText(sessionId, text, isFinal = true) {
     if (!sessionId) throw new Error("Session ID is required");
 
-    const response = await fetch(`${API_BASE_URL}/voice/process-text`, {
+    const response = await authFetch(`${API_BASE_URL}/voice/process-text`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -121,7 +168,7 @@ export const api = {
   async voiceProcessAudio(sessionId, audioBase64, audioFormat = "webm", language = "en") {
     if (!sessionId) throw new Error("Session ID is required");
 
-    const response = await fetch(`${API_BASE_URL}/voice/process-audio`, {
+    const response = await authFetch(`${API_BASE_URL}/voice/process-audio`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -145,7 +192,7 @@ export const api = {
   async voiceInterrupt(sessionId, text) {
     if (!sessionId) throw new Error("Session ID is required");
 
-    const response = await fetch(`${API_BASE_URL}/voice/interrupt`, {
+    const response = await authFetch(`${API_BASE_URL}/voice/interrupt`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -164,7 +211,7 @@ export const api = {
   async voiceConfirm(sessionId, confirmed, additionalText = null) {
     if (!sessionId) throw new Error("Session ID is required");
 
-    const response = await fetch(`${API_BASE_URL}/voice/confirm`, {
+    const response = await authFetch(`${API_BASE_URL}/voice/confirm`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -182,7 +229,7 @@ export const api = {
    * Get current voice state for a session
    */
   async voiceGetState(sessionId) {
-    const response = await fetch(`${API_BASE_URL}/voice/state/${sessionId}`);
+    const response = await authFetch(`${API_BASE_URL}/voice/state/${sessionId}`);
     if (!response.ok) throw new Error("Failed to get voice state");
     return response.json();
   },
@@ -193,7 +240,7 @@ export const api = {
   async voiceReset(sessionId) {
     if (!sessionId) throw new Error("Session ID is required");
 
-    const response = await fetch(`${API_BASE_URL}/voice/reset`, {
+    const response = await authFetch(`${API_BASE_URL}/voice/reset`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ sessionId }),
@@ -207,9 +254,9 @@ export const api = {
    * Mark that agent has started speaking (for TTS)
    */
   async voiceSpeakingStarted(sessionId, responseText) {
-    const response = await fetch(
+    const response = await authFetch(
       `${API_BASE_URL}/voice/speaking-started?sessionId=${sessionId}&response_text=${encodeURIComponent(responseText)}`,
-      { method: "POST" }
+      { method: "POST" },
     );
     if (!response.ok) throw new Error("Failed to mark speaking started");
     return response.json();
@@ -219,9 +266,9 @@ export const api = {
    * Mark that agent has finished speaking
    */
   async voiceSpeakingEnded(sessionId) {
-    const response = await fetch(
+    const response = await authFetch(
       `${API_BASE_URL}/voice/speaking-ended?sessionId=${sessionId}`,
-      { method: "POST" }
+      { method: "POST" },
     );
     if (!response.ok) throw new Error("Failed to mark speaking ended");
     return response.json();
@@ -231,7 +278,7 @@ export const api = {
    * Get intent and backchannel word lexicons
    */
   async voiceGetLexicons() {
-    const response = await fetch(`${API_BASE_URL}/voice/lexicons`);
+    const response = await authFetch(`${API_BASE_URL}/voice/lexicons`);
     if (!response.ok) throw new Error("Failed to get lexicons");
     return response.json();
   },
@@ -239,14 +286,14 @@ export const api = {
   async executePlan(sessionId) {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 300000); // 5 minute timeout for long-running agent operations
-    
+
     try {
-      const res = await fetch(`${API_BASE_URL}/execute?sessionId=${sessionId}`, {
+      const res = await authFetch(`${API_BASE_URL}/execute?sessionId=${sessionId}`, {
         method: "POST",
         signal: controller.signal,
       });
       clearTimeout(timeoutId);
-      
+
       if (!res.ok) {
         const errorData = await res.json().catch(() => ({ detail: "Execution failed" }));
         throw new Error(errorData.detail || "Execution failed");
@@ -254,11 +301,87 @@ export const api = {
       return res.json();
     } catch (error) {
       clearTimeout(timeoutId);
-      if (error.name === 'AbortError') {
+      if (error.name === "AbortError") {
         throw new Error("Request timed out. The analysis is taking longer than expected.");
       }
       throw error;
     }
+  },
+
+  // ===== NEWS MONITOR API =====
+
+  async enableNotification(sessionId, promptId, tagName = "", enabled = true) {
+    const response = await authFetch(`${API_BASE_URL}/news/enable`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sessionId, promptId, tagName, enabled }),
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({ detail: "Failed" }));
+      throw new Error(err.detail || "Failed to toggle notification");
+    }
+    return response.json();
+  },
+
+  async recheckNotification(sessionId, promptId, rerunAnalysis = false) {
+    const response = await authFetch(`${API_BASE_URL}/news/recheck`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sessionId, promptId, rerunAnalysis }),
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({ detail: "Recheck failed" }));
+      throw new Error(err.detail || "Recheck failed");
+    }
+    return response.json();
+  },
+
+  async getMonitored(sessionId) {
+    const response = await authFetch(
+      `${API_BASE_URL}/news/monitored?sessionId=${encodeURIComponent(sessionId)}`,
+    );
+    if (!response.ok) throw new Error("Failed to get monitored list");
+    return response.json();
+  },
+
+  async getAllMonitored() {
+    const response = await authFetch(`${API_BASE_URL}/news/monitored-all`);
+    if (!response.ok) throw new Error("Failed to get all monitored");
+    return response.json();
+  },
+
+  async broadcastIntel(text) {
+    const response = await authFetch(`${API_BASE_URL}/news/broadcast-intel`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text }),
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({ detail: "Failed" }));
+      throw new Error(err.detail || "Intel broadcast failed");
+    }
+    return response.json();
+  },
+
+  async acknowledgeAllNotifications(sessionIds = null) {
+    const response = await fetch(`${API_BASE_URL}/news/acknowledge-all`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sessionIds }),
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({ detail: "Failed" }));
+      throw new Error(err.detail || "Acknowledge failed");
+    }
+    return response.json();
+  },
+
+  async getNotificationDetails(notificationId) {
+    const response = await authFetch(
+      `${API_BASE_URL}/news/details/${encodeURIComponent(notificationId)}`,
+    );
+    if (!response.ok) throw new Error("Failed to get notification details");
+    return response.json();
   },
 };
 

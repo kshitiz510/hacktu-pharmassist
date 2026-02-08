@@ -12,49 +12,61 @@ import { TrendingUp, TrendingDown, Minus } from "lucide-react";
 const CARD_HEIGHT = "h-[120px]";
 const CARD_MIN_HEIGHT = "min-h-[120px]";
 
-// Color themes matching agent colors
+// Color themes — Teal + Deep Navy palette
 const colorThemes = {
+  sky: {
+    bg: "bg-sky-500/6",
+    border: "border-sky-500/20",
+    accent: "text-sky-400",
+    gradient: "from-sky-500/8 to-transparent",
+  },
   blue: {
-    bg: "bg-blue-500/5",
-    border: "border-blue-500/20",
-    accent: "text-blue-400",
-    gradient: "from-blue-500/10 to-transparent",
+    bg: "bg-sky-500/6",
+    border: "border-sky-500/20",
+    accent: "text-sky-400",
+    gradient: "from-sky-500/8 to-transparent",
   },
   teal: {
-    bg: "bg-teal-500/5",
+    bg: "bg-teal-500/6",
     border: "border-teal-500/20",
     accent: "text-teal-400",
-    gradient: "from-teal-500/10 to-transparent",
+    gradient: "from-teal-500/8 to-transparent",
   },
   amber: {
-    bg: "bg-amber-500/5",
+    bg: "bg-amber-500/6",
     border: "border-amber-500/20",
     accent: "text-amber-400",
-    gradient: "from-amber-500/10 to-transparent",
+    gradient: "from-amber-500/8 to-transparent",
   },
   emerald: {
-    bg: "bg-emerald-500/5",
+    bg: "bg-emerald-500/6",
     border: "border-emerald-500/20",
     accent: "text-emerald-400",
-    gradient: "from-emerald-500/10 to-transparent",
+    gradient: "from-emerald-500/8 to-transparent",
   },
   violet: {
-    bg: "bg-violet-500/5",
+    bg: "bg-violet-500/6",
     border: "border-violet-500/20",
     accent: "text-violet-400",
-    gradient: "from-violet-500/10 to-transparent",
+    gradient: "from-violet-500/8 to-transparent",
   },
   pink: {
-    bg: "bg-pink-500/5",
-    border: "border-pink-500/20",
-    accent: "text-pink-400",
-    gradient: "from-pink-500/10 to-transparent",
-  },
-  cyan: {
-    bg: "bg-cyan-500/5",
+    bg: "bg-cyan-500/6",
     border: "border-cyan-500/20",
     accent: "text-cyan-400",
-    gradient: "from-cyan-500/10 to-transparent",
+    gradient: "from-cyan-500/8 to-transparent",
+  },
+  cyan: {
+    bg: "bg-cyan-500/6",
+    border: "border-cyan-500/20",
+    accent: "text-cyan-400",
+    gradient: "from-cyan-500/8 to-transparent",
+  },
+  indigo: {
+    bg: "bg-indigo-500/6",
+    border: "border-indigo-500/20",
+    accent: "text-indigo-400",
+    gradient: "from-indigo-500/8 to-transparent",
   },
 };
 
@@ -91,11 +103,11 @@ export function MetricCard({
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: delay * 0.05, duration: 0.3 }}
       className={`
-        relative overflow-hidden rounded-xl border ${theme.border} ${theme.bg}
+        relative overflow-hidden rounded-2xl border ${theme.border} ${theme.bg}
         ${compact ? "p-3" : "p-4"}
         ${compact ? "min-h-[80px]" : CARD_MIN_HEIGHT}
         bg-gradient-to-br ${theme.gradient}
-        hover:border-opacity-40 transition-all duration-300
+        hover:border-opacity-50 transition-all duration-300 backdrop-blur-sm
         flex flex-col justify-between
       `}
     >
@@ -167,7 +179,7 @@ export function DataTable({ headers = [], rows = [], color = "blue", compact = f
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
-      className={`rounded-xl border ${theme.border} overflow-hidden`}
+      className={`rounded-2xl border ${theme.border} overflow-hidden backdrop-blur-sm`}
     >
       <table className="w-full text-sm">
         <thead className="bg-muted/50">
@@ -216,9 +228,9 @@ export function InfoCard({ title, content, items = [], color = "blue", icon: Ico
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: delay * 0.05, duration: 0.3 }}
       className={`
-        rounded-xl border ${theme.border} ${theme.bg}
+        rounded-2xl border ${theme.border} ${theme.bg}
         bg-gradient-to-br ${theme.gradient}
-        p-4 space-y-2
+        p-4 space-y-2 backdrop-blur-sm
       `}
     >
       {title && (
@@ -252,7 +264,7 @@ export function SectionHeader({ title, badge, color = "blue" }) {
 
   return (
     <div className="flex items-center gap-2 mb-3">
-      <h3 className={`font-semibold ${theme.accent} text-base`}>{title}</h3>
+      <h3 className={`font-semibold ${theme.accent} text-base tracking-tight font-[family-name:var(--font-heading)]`}>{title}</h3>
       {badge && (
         <span
           className={`text-xs px-2 py-0.5 rounded-full ${theme.bg} ${theme.accent} font-medium`}
@@ -309,9 +321,10 @@ export function SummaryBanner({ summary, color = "blue", delay = 0 }) {
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: delay * 0.05, duration: 0.3 }}
       className={`
-        relative overflow-hidden rounded-xl border ${theme.border} ${theme.bg}
+        relative overflow-hidden rounded-2xl border ${theme.border} ${theme.bg}
         p-4 mb-4
         bg-gradient-to-br ${theme.gradient}
+        backdrop-blur-sm
       `}
     >
       {/* Question and Answer Row */}
@@ -361,7 +374,7 @@ export function SuggestedPrompts({ prompts, onPromptClick, color = "blue" }) {
   const theme = colorThemes[color] || colorThemes.blue;
 
   return (
-    <div className="mt-4 pt-4 border-t border-white/5">
+    <div className="mt-4 pt-4 border-t border-white/[0.04]">
       <p className="text-xs text-muted-foreground mb-2">Suggested follow-ups:</p>
       <div className="flex flex-wrap gap-2">
         {prompts.slice(0, 2).map((item, idx) => (

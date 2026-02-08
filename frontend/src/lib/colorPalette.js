@@ -10,62 +10,57 @@
  */
 
 // ============================================================================
-// PRIMARY COLOR PALETTE - Professional & Distinct
+// PRIMARY COLOR PALETTE — Teal + Deep Navy Pharmaceutical Theme
 // ============================================================================
 
 export const PRIMARY_PALETTE = [
-  "#003f5c", // Dark Navy Blue
-  "#2f4b7c", // Royal Blue
-  "#665191", // Blue-Purple
-  "#a05195", // Muted Purple
-  "#d45087", // Rose-Pink
-  "#f95d6a", // Coral-Pink
-  "#ff7c43", // Burnt Orange
-  "#ffa600", // Amber-Gold
+  "#0e7490", // Deep Teal (cyan-700)
+  "#0ea5e9", // Bright Sky (sky-500)
+  "#2dd4bf", // Clinical Teal (teal-400)
+  "#818cf8", // Soft Indigo (indigo-400)
+  "#38bdf8", // Light Sky (sky-400)
+  "#34d399", // Emerald (emerald-400)
+  "#fbbf24", // Amber (amber-400)
+  "#a78bfa", // Violet (violet-400)
 ];
 
 // ============================================================================
-// EXTENDED PALETTE - More colors for larger datasets
+// EXTENDED PALETTE — Teal + Deep Navy expanded
 // ============================================================================
 
 export const EXTENDED_PALETTE = [
-  // Dark to light blues
-  "#003f5c",
-  "#1a5276",
-  "#2f4b7c",
-  "#445fa0",
-  "#5873b4",
+  // Deep teals → sky blues
+  "#0e7490",
+  "#0891b2",
+  "#06b6d4",
+  "#22d3ee",
+  "#38bdf8",
 
-  // Blues to purples
-  "#665191",
-  "#7560a0",
-  "#844faf",
-  "#933ebe",
+  // Sky → indigo
+  "#0ea5e9",
+  "#6366f1",
+  "#818cf8",
+  "#a78bfa",
 
-  // Purples to magentas
-  "#a05195",
-  "#b05aa5",
-  "#c063b5",
+  // Teal → emerald
+  "#14b8a6",
+  "#2dd4bf",
+  "#34d399",
 
-  // Magentas to pinks
-  "#d45087",
-  "#e06c95",
-  "#eb88a3",
+  // Emerald → warm accents
+  "#10b981",
+  "#fbbf24",
+  "#f59e0b",
 
-  // Pinks to corals
-  "#f95d6a",
-  "#fa7a72",
-  "#fb977a",
+  // Amber → violet
+  "#d97706",
+  "#8b5cf6",
+  "#7c3aed",
 
-  // Corals to oranges
-  "#ff7c43",
-  "#ff8e52",
-  "#ffa061",
-
-  // Oranges to golds
-  "#ffa600",
-  "#ffb319",
-  "#ffc033",
+  // Complementary finish
+  "#c084fc",
+  "#67e8f9",
+  "#a5f3fc",
 ];
 
 // ============================================================================
@@ -189,17 +184,17 @@ export const AMBER_SCALE = [
 // ============================================================================
 
 /**
- * Cold to Hot heatmap (blue -> red)
+ * Cold to Hot heatmap (teal -> amber)
  */
 export const COLD_TO_HOT = [
-  "#003f5c", // Cold
-  "#2f4b7c",
-  "#665191",
-  "#a05195",
-  "#d45087",
-  "#f95d6a",
-  "#ff7c43",
-  "#ffa600", // Hot
+  "#0e7490", // Cold teal
+  "#0891b2",
+  "#06b6d4",
+  "#22d3ee",
+  "#38bdf8",
+  "#fbbf24",
+  "#f59e0b",
+  "#d97706", // Hot amber
 ];
 
 /**
@@ -207,17 +202,17 @@ export const COLD_TO_HOT = [
  * Low | Middle | High
  */
 export const DIVERGING_SCALE = [
-  "#003f5c", // Low
-  "#2f4b7c",
-  "#5873b4",
-  "#7fa6d8",
-  "#b8d4e8",
+  "#0e7490", // Low — deep teal
+  "#0891b2",
+  "#22d3ee",
+  "#67e8f9",
+  "#a5f3fc",
   "#e8e8e8", // Middle neutral
-  "#f0cac3",
-  "#e89f8c",
-  "#e07562",
-  "#ff7c43",
-  "#ffa600", // High
+  "#fde68a",
+  "#fbbf24",
+  "#f59e0b",
+  "#d97706",
+  "#b45309", // High — deep amber
 ];
 
 // ============================================================================
